@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Save Form API</title>
+</head>
+<body>
+    <h1>Test Form Save</h1>
+    <button onclick="testSave()">Click to Test Save Form</button>
+    <div id="result"></div>
+
+    <script>
+        function testSave() {
+            const testData = {
+                title: "Test Form from HTML",
+                description: "This is a test",
+                questions: [
+                    {
+                        text: "What is your name?",
+                        type: "text",
+                        options: []
+                    },
+                    {
+                        text: "What is your favorite color?",
+                        type: "multiple_choice",
+                        options: ["Red", "Blue", "Green"]
+                    }
+                ]
+            };
+
+            fetch('http://formbuilder.local/form-builder-api/save_form.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(testData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('result').innerHTML = 
+                    '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                console.log('Success:', data);
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = 
+                    '<pre style="color: red;">Error: ' + error + '</pre>';
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
