@@ -70,7 +70,8 @@ try {
             id,
             question_text,
             question_type,
-            position
+            position,
+            is_required
         FROM questions
         WHERE form_id = ?
         ORDER BY position ASC

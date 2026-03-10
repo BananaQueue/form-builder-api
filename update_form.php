@@ -62,7 +62,7 @@ try {
     $stmt->execute([$formId]);
     
     // Insert updated questions
-    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, position) VALUES (?, ?, ?, ?)");
+    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, position, is_required) VALUES (?, ?, ?, ?, ?)");
     $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
     
     foreach ($questions as $index => $question) {
@@ -71,7 +71,8 @@ try {
             $formId,
             $question['text'],
             $question['type'],
-            $index
+            $index,
+            $question['is_required'] ?? 1
         ]);
         
         // Get the ID of the inserted question
