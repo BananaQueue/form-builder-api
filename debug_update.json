@@ -1,0 +1,33 @@
+{
+    "title": "Conditional Test",
+    "description": "Testing Conditional Question",
+    "category_id": 1,
+    "questions": [
+        {
+            "id": "q_1773208288408_1944",
+            "question_text": "Bureau",
+            "question_type": "checkbox",
+            "position": 0,
+            "options": [
+                "DENR",
+                "EMB"
+            ],
+            "is_required": 1,
+            "condition_question_id": null,
+            "condition_type": "equals",
+            "condition_value": null
+        },
+        {
+            "id": "q_1773208302608",
+            "question_text": "Division",
+            "question_type": "text",
+            "position": 1,
+            "options": [],
+            "is_required": 1,
+            "condition_question_id": "q_1773208288408_1944",
+            "condition_type": "equals",
+            "condition_value": "EMB"
+        }
+    ],
+    "form_id": 18
+}

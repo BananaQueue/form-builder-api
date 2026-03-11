@@ -36,6 +36,8 @@ require_once 'db.php';
 $json = file_get_contents('php://input');
 $data = json_decode($json, true);
 
+file_put_contents('debug_update.json', json_encode($data, JSON_PRETTY_PRINT));
+
 // Validate data
 if (!$data || !isset($data['form_id']) || !isset($data['title']) || !isset($data['questions'])) {
     http_response_code(400);
@@ -52,62 +54,88 @@ $questions = $data['questions'];
 try {
     // Start transaction
     $pdo->beginTransaction();
-    
+
     // Update form details
     $stmt = $pdo->prepare("UPDATE forms SET title = ?, description = ?, category_id = ? WHERE id = ?");
     $stmt->execute([$title, $description, $categoryId, $formId]);
-    
+
     // Delete existing questions and options (CASCADE will handle options)
     $stmt = $pdo->prepare("DELETE FROM questions WHERE form_id = ?");
     $stmt->execute([$formId]);
-    
+
     // Insert updated questions
-    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, position, is_required) VALUES (?, ?, ?, ?, ?)");
+    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
-    
+
+    // First pass: Insert all questions and map temporary IDs to database IDs
+    $questionIdMap = [];
+
     foreach ($questions as $index => $question) {
-        // Insert question
+
+        $questionText = $question['question_text'] ?? ($question['text'] ?? '');
+        $questionType = $question['question_type'] ?? ($question['type'] ?? 'text');
+
         $questionStmt->execute([
             $formId,
-            $question['text'],
-            $question['type'],
+            $questionText,
+            $questionType,
             $index,
-            $question['is_required'] ?? 1
+            $question['is_required'] ?? 1,
+            null,
+            $question['condition_type'] ?? 'equals',
+            null
         ]);
-        
-        // Get the ID of the inserted question
-        $questionId = $pdo->lastInsertId();
-        
-        // Insert options if they exist
+
+        $dbQuestionId = $pdo->lastInsertId();
+        $clientTempId = $question['id'] ?? $index;
+        $questionIdMap[$clientTempId] = $dbQuestionId;
+
         if (isset($question['options']) && is_array($question['options'])) {
             foreach ($question['options'] as $optIndex => $option) {
                 $optionStmt->execute([
-                    $questionId,
+                    $dbQuestionId,
                     $option,
                     $optIndex
                 ]);
             }
         }
     }
-    
+
+    // Second pass: Update conditional logic
+    $updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?");
+
+    foreach ($questions as $index => $question) {
+        if (isset($question['condition_question_id']) && $question['condition_question_id']) {
+            $dbQuestionId = $questionIdMap[$question['id']];
+            $conditionDbId = $questionIdMap[$question['condition_question_id']] ?? null;
+
+            if ($conditionDbId) {
+                $updateConditionStmt->execute([
+                    $conditionDbId,
+                    $question['condition_type'] ?? 'equals',
+                    $question['condition_value'] ?? null,
+                    $dbQuestionId
+                ]);
+            }
+        }
+    }
+
     // Commit transaction
     $pdo->commit();
-    
+
     // Return success response
     echo json_encode([
         'success' => true,
         'message' => 'Form updated successfully',
         'form_id' => $formId
     ]);
-    
 } catch (Exception $e) {
     // Rollback transaction on error
     $pdo->rollBack();
-    
+
     http_response_code(500);
     echo json_encode([
         'error' => 'Failed to update form',
         'message' => $e->getMessage()
     ]);
 }
-?>

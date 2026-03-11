@@ -1,7 +1,7 @@
 <?php
-// Enable error reporting for debugging
+// Error reporting: log errors, but don't output warnings/notices as HTML (breaks JSON responses)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // Allow requests from React app (CORS)
 // Define allowed origins (whitelist)
@@ -57,41 +57,79 @@ try {
     // Insert form with category
     $stmt = $pdo->prepare("INSERT INTO forms (title, description, category_id) VALUES (?, ?, ?)");
     $stmt->execute([
-    $data['title'], 
-    $data['description'] ?? '', 
-    $data['category_id'] ?? 1  // Default to 1 (General) if not provided
+        $data['title'],
+        $data['description'] ?? '',
+        $data['category_id'] ?? 1  // Default to 1 (General) if not provided
     ]);
 
     // Get the ID of the inserted form
     $formId = $pdo->lastInsertId();
 
     // Insert questions
-    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, position, is_required) VALUES (?, ?, ?, ?, ?)");$optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
+    $questions = $data['questions'];
+    if (!is_array($questions)) {
+        $questions = [];
+    }
 
-    foreach ($data['questions'] as $index => $question) {
-        // Insert question
-        $questionStmt->execute([
-            $formId,
-            $question['text'],
-            $question['type'],
-            $index,
-            $question['is_required'] ?? 1
-        ]);
+    // First pass: Insert all questions and map temporary IDs to database IDs (if provided)
+    $questionIdMap = []; // Maps client temp ID -> database ID
 
-        // Get the ID of the inserted question
-        $questionId = $pdo->lastInsertId();
+    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
 
-        // Insert options if they exist
-        if (isset($question['options']) && is_array($question['options'])) {
-            foreach ($question['options'] as $optIndex => $option) {
-                $optionStmt->execute([
-                    $questionId,
-                    $option,
-                    $optIndex
-                ]);
-            }
+    foreach ($questions as $index => $question) {
+        // Support both old client keys (text/type) and new keys (question_text/question_type)
+        $questionText = $question['question_text'] ?? ($question['text'] ?? '');
+        $questionType = $question['question_type'] ?? ($question['type'] ?? 'text');
+
+        // If client didn't send an ID, fall back to index-based mapping
+        $clientTempId = $question['id'] ?? $index;
+
+    $questionStmt->execute([
+        $formId,
+        $questionText,
+        $questionType,
+        $question['position'] ?? $index,
+        $question['is_required'] ?? 1,
+        null, // Will update in second pass
+        $question['condition_type'] ?? 'equals',
+        null  // Will update in second pass
+    ]);
+    
+    $dbQuestionId = $pdo->lastInsertId();
+    $questionIdMap[$clientTempId] = $dbQuestionId;
+    
+    // Insert options
+    if (isset($question['options']) && is_array($question['options'])) {
+        foreach ($question['options'] as $optIndex => $option) {
+            $optionStmt->execute([
+                $dbQuestionId,
+                $option,
+                $optIndex
+            ]);
         }
     }
+}
+
+// Second pass: Update conditional logic references
+$updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?");
+
+foreach ($questions as $index => $question) {
+    if (isset($question['condition_question_id']) && $question['condition_question_id']) {
+        $clientTempId = $question['id'] ?? $index;
+        $dbQuestionId = $questionIdMap[$clientTempId] ?? null;
+        $conditionDbId = $questionIdMap[$question['condition_question_id']] ?? null;
+        
+        if ($dbQuestionId && $conditionDbId) {
+            $updateConditionStmt->execute([
+                $conditionDbId,
+                $question['condition_type'] ?? 'equals',
+                $question['condition_value'] ?? null,
+                $dbQuestionId
+            ]);
+        }
+    }
+}
 
     // Commit transaction
     $pdo->commit();

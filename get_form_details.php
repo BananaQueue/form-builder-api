@@ -57,28 +57,31 @@ try {
     ");
     $stmt->execute([$form_id]);
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
-    
+
     if (!$form) {
         http_response_code(404);
         echo json_encode(['error' => 'Form not found']);
         exit();
     }
-    
+
     // Get questions for this form
     $stmt = $pdo->prepare("
-        SELECT 
-            id,
-            question_text,
-            question_type,
-            position,
-            is_required
-        FROM questions
-        WHERE form_id = ?
-        ORDER BY position ASC
+    SELECT 
+        id,
+        question_text,
+        question_type,
+        position,
+        is_required,
+        condition_question_id,
+        condition_type,
+        condition_value
+    FROM questions
+    WHERE form_id = ?
+    ORDER BY position ASC
     ");
     $stmt->execute([$form_id]);
     $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
     // For each question, get its options
     foreach ($questions as &$question) {
         $stmt = $pdo->prepare("
@@ -91,22 +94,21 @@ try {
         ");
         $stmt->execute([$question['id']]);
         $options = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+
         // Extract just the option text into an array
-        $question['options'] = array_map(function($opt) {
+        $question['options'] = array_map(function ($opt) {
             return $opt['option_text'];
         }, $options);
     }
-    
+
     // Add questions to form data
     $form['questions'] = $questions;
-    
+
     // Return success with form data
     echo json_encode([
         'success' => true,
         'form' => $form
     ]);
-    
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
@@ -114,4 +116,3 @@ try {
         'message' => $e->getMessage()
     ]);
 }
-?>
