@@ -1,17 +1,19 @@
 {
-    "title": "EMPLOYMENT",
-    "description": "Nkl;dsf;kog",
-    "category_id": 3,
+    "title": "Rating Test",
+    "description": "Testing rating type",
+    "category_id": 2,
     "questions": [
         {
-            "id": "q_1773280881645_2029",
-            "question_text": "What is your current employment status? ",
-            "question_type": "checkbox",
+            "id": "q_1773295417778_8622",
+            "question_text": "Do you agree?",
+            "question_type": "rating",
             "position": 0,
             "options": [
-                "Permanent",
-                "Job Order",
-                "Contract of Service"
+                "Strongly Disagree",
+                "Disagree",
+                "Neutral",
+                "Agree",
+                "Strongly Agree"
             ],
             "is_required": 1,
             "condition_question_id": null,
@@ -19,22 +21,16 @@
             "condition_value": null
         },
         {
-            "id": "q_1773281043592",
-            "question_text": "What is your Job Title?",
-            "question_type": "multiple_choice",
+            "id": "q_1773295417778_1981",
+            "question_text": "How many percent",
+            "question_type": "text",
             "position": 1,
-            "options": [
-                "Data Controller I",
-                " Data Controller II",
-                " Project Development Officer I",
-                "Planning Officer I",
-                "Planning Officer II"
-            ],
+            "options": [],
             "is_required": 1,
-            "condition_question_id": "q_1773280881645_2029",
+            "condition_question_id": 65,
             "condition_type": "equals",
-            "condition_value": "Permanent"
+            "condition_value": "Agree"
         }
     ],
-    "form_id": 21
+    "form_id": 22
 }

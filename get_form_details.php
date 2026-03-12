@@ -70,6 +70,7 @@ try {
         id,
         question_text,
         question_type,
+        rating_scale,
         position,
         is_required,
         condition_question_id,

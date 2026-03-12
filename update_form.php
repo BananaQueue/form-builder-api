@@ -64,7 +64,7 @@ try {
     $stmt->execute([$formId]);
 
     // Insert updated questions
-    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, rating_scale, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
 
     // First pass: Insert all questions and map temporary IDs to database IDs
@@ -79,6 +79,7 @@ try {
             $formId,
             $questionText,
             $questionType,
+            $question['rating_scale'] ?? null,
             $index,
             $question['is_required'] ?? 1,
             null,
