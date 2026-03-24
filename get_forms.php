@@ -42,10 +42,12 @@ try {
         f.created_at,
         f.category_id,
         c.name as category_name,
-        COUNT(q.id) as question_count
+        COUNT(q.id) as question_count,
+        COUNT(r.id) as response_count
     FROM forms f
     LEFT JOIN categories c ON f.category_id = c.id
     LEFT JOIN questions q ON f.id = q.form_id
+    LEFT JOIN responses r ON f.id = r.form_id
     GROUP BY f.id, c.name
     ORDER BY f.created_at DESC
     ");
