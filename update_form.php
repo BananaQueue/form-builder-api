@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Include database connection
 require_once 'db.php';
+require_once 'question_map_helpers.php';
 
 // Get JSON data
 $json = file_get_contents('php://input');
@@ -106,18 +107,21 @@ try {
     $updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?");
 
     foreach ($questions as $index => $question) {
-        if (isset($question['condition_question_id']) && $question['condition_question_id']) {
-            $dbQuestionId = $questionIdMap[$question['id']];
-            $conditionDbId = $questionIdMap[$question['condition_question_id']] ?? null;
+        $condRef = $question['condition_question_id'] ?? null;
+        if ($condRef === null || $condRef === '') {
+            continue;
+        }
+        $clientTempId = $question['id'] ?? $index;
+        $dbQuestionId = fb_question_map_get($questionIdMap, $clientTempId);
+        $conditionDbId = fb_question_map_get($questionIdMap, $condRef);
 
-            if ($conditionDbId) {
-                $updateConditionStmt->execute([
-                    $conditionDbId,
-                    $question['condition_type'] ?? 'equals',
-                    $question['condition_value'] ?? null,
-                    $dbQuestionId
-                ]);
-            }
+        if ($dbQuestionId && $conditionDbId) {
+            $updateConditionStmt->execute([
+                $conditionDbId,
+                $question['condition_type'] ?? 'equals',
+                $question['condition_value'] ?? null,
+                $dbQuestionId
+            ]);
         }
     }
 
