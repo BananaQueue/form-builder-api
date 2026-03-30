@@ -99,8 +99,8 @@ $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_t
 foreach ($questions as $index => $question) {
     $questionStmt->execute([
         $formId,                                    // 1. form_id
-        $question['text'],                          // 2. question_text
-        $question['type'],                          // 3. question_type
+        $question['question_text'] ?? ($question['text'] ?? ''),   // 2. question_text
+        $question['question_type'] ?? ($question['type'] ?? 'text'), // 3. question_type
         $question['rating_scale'] ?? null,          // 4. rating_scale
         $question['number_min'] ?? null,            // 5. number_min
         $question['number_max'] ?? null,            // 6. number_max
@@ -114,7 +114,8 @@ foreach ($questions as $index => $question) {
     ]);
     
     $dbQuestionId = $pdo->lastInsertId();
-    $questionIdMap[$question['id']] = $dbQuestionId;
+    $clientTempId = $question['id'] ?? $index;
+    $questionIdMap[$clientTempId] = $dbQuestionId;
     
     // Insert options
     if (isset($question['options']) && is_array($question['options'])) {
@@ -149,7 +150,6 @@ $updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id
             ]);
         }
     }
-}
 
     // Commit transaction
     $pdo->commit();
