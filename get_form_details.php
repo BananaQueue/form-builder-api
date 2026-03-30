@@ -67,10 +67,14 @@ try {
     // Get questions for this form
     $stmt = $pdo->prepare("
     SELECT 
-        id,
+         id,
         question_text,
         question_type,
         rating_scale,
+        number_min,
+        number_max,
+        number_step,
+        datetime_type,
         position,
         is_required,
         condition_question_id,

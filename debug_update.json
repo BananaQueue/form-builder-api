@@ -10,6 +10,21 @@
             "rating_scale": null,
             "position": 0,
             "options": [],
+    "title": "Test",
+    "description": "Test Test",
+    "category_id": 1,
+    "questions": [
+        {
+            "id": 89,
+            "question_text": "Test",
+            "question_type": "multiple_choice",
+            "rating_scale": null,
+            "position": 0,
+            "options": [
+                "Test 1",
+                "Test 2",
+                "Test 3"
+            ],
             "is_required": 1,
             "condition_question_id": null,
             "condition_type": "equals",
@@ -33,4 +48,33 @@
         }
     ],
     "form_id": 5
+            "id": 90,
+            "question_text": "2 Test",
+            "question_type": "checkbox",
+            "rating_scale": null,
+            "position": 1,
+            "options": [
+                "1",
+                "2",
+                "3"
+            ],
+            "is_required": 1,
+            "condition_question_id": null,
+            "condition_type": "equals",
+            "condition_value": null
+        },
+        {
+            "id": 91,
+            "question_text": "Seret",
+            "question_type": "text",
+            "rating_scale": null,
+            "position": 2,
+            "options": [],
+            "is_required": 1,
+            "condition_question_id": 89,
+            "condition_type": "equals",
+            "condition_value": "Test 1"
+        }
+    ],
+    "form_id": 23
 }
