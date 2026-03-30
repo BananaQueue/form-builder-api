@@ -1,7 +1,8 @@
 <?php
 // Error reporting: log errors, but don't output warnings/notices as HTML (breaks JSON responses)
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
+
 
 // Allow requests from React app (CORS)
 // Define allowed origins (whitelist)
@@ -71,66 +72,79 @@ try {
         $questions = [];
     }
 
-    // First pass: Insert all questions and map temporary IDs to database IDs (if provided)
-    $questionIdMap = []; // Maps client temp ID -> database ID
+  // First pass: Insert all questions and map temporary IDs to database IDs
+$questionIdMap = []; // Maps React temp ID to database ID
 
-    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, rating_scale, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
+$questionStmt = $pdo->prepare("
+    INSERT INTO questions (
+        form_id, 
+        question_text, 
+        question_type, 
+        rating_scale, 
+        number_min, 
+        number_max, 
+        number_step, 
+        datetime_type, 
+        position, 
+        is_required, 
+        condition_question_id, 
+        condition_type, 
+        condition_value
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+");
 
-    foreach ($questions as $index => $question) {
-        // Support both old client keys (text/type) and new keys (question_text/question_type)
-        $questionText = $question['question_text'] ?? ($question['text'] ?? '');
-        $questionType = $question['question_type'] ?? ($question['type'] ?? 'text');
+$optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
 
-        // If client didn't send an ID, fall back to index-based mapping
-        $clientTempId = $question['id'] ?? $index;
-
-        $questionStmt->execute([
-            $formId,
-            $questionText,
-            $questionType,
-            $question['rating_scale'] ?? null,
-            $question['position'] ?? $index,
-            $question['is_required'] ?? 1,
-            null, // Will update in second pass
-            $question['condition_type'] ?? 'equals',
-            null  // Will update in second pass
-        ]);
-
-        $dbQuestionId = $pdo->lastInsertId();
-        $questionIdMap[$clientTempId] = $dbQuestionId;
-
-        // Insert options
-        if (isset($question['options']) && is_array($question['options'])) {
-            foreach ($question['options'] as $optIndex => $option) {
-                $optionStmt->execute([
-                    $dbQuestionId,
-                    $option,
-                    $optIndex
-                ]);
-            }
+foreach ($questions as $index => $question) {
+    $questionStmt->execute([
+        $formId,                                    // 1. form_id
+        $question['text'],                          // 2. question_text
+        $question['type'],                          // 3. question_type
+        $question['rating_scale'] ?? null,          // 4. rating_scale
+        $question['number_min'] ?? null,            // 5. number_min
+        $question['number_max'] ?? null,            // 6. number_max
+        $question['number_step'] ?? null,           // 7. number_step
+        $question['datetime_type'] ?? null,         // 8. datetime_type
+        $index,                                     // 9. position
+        $question['is_required'] ?? 1,              // 10. is_required
+        null,                                       // 11. condition_question_id (updated in second pass)
+        $question['condition_type'] ?? 'equals',    // 12. condition_type
+        null                                        // 13. condition_value (updated in second pass)
+    ]);
+    
+    $dbQuestionId = $pdo->lastInsertId();
+    $questionIdMap[$question['id']] = $dbQuestionId;
+    
+    // Insert options
+    if (isset($question['options']) && is_array($question['options'])) {
+        foreach ($question['options'] as $optIndex => $option) {
+            $optionStmt->execute([
+                $dbQuestionId,
+                $option,
+                $optIndex
+            ]);
         }
     }
+}
 
-    // Second pass: Update conditional logic references
-    $updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?");
+// Second pass: Update conditional logic references
+$updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?");
 
-    foreach ($questions as $index => $question) {
-        if (isset($question['condition_question_id']) && $question['condition_question_id']) {
-            $clientTempId = $question['id'] ?? $index;
-            $dbQuestionId = $questionIdMap[$clientTempId] ?? null;
-            $conditionDbId = $questionIdMap[$question['condition_question_id']] ?? null;
-
-            if ($dbQuestionId && $conditionDbId) {
-                $updateConditionStmt->execute([
-                    $conditionDbId,
-                    $question['condition_type'] ?? 'equals',
-                    $question['condition_value'] ?? null,
-                    $dbQuestionId
-                ]);
-            }
+foreach ($questions as $index => $question) {
+    if (isset($question['condition_question_id']) && $question['condition_question_id']) {
+        $dbQuestionId = $questionIdMap[$question['id']];
+        $conditionDbId = $questionIdMap[$question['condition_question_id']] ?? null;
+        
+        if ($conditionDbId) {
+            $updateConditionStmt->execute([
+                $conditionDbId,
+                $question['condition_type'] ?? 'equals',
+                $question['condition_value'] ?? null,
+                $dbQuestionId
+            ]);
         }
     }
+}
 
     // Commit transaction
     $pdo->commit();

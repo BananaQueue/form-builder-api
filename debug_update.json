@@ -1,19 +1,18 @@
 {
-    "title": "Rating Test",
-    "description": "Testing rating type",
-    "category_id": 2,
+    "title": "Test",
+    "description": "Test Test",
+    "category_id": 1,
     "questions": [
         {
-            "id": "q_1773295417778_8622",
-            "question_text": "Do you agree?",
-            "question_type": "rating",
+            "id": 89,
+            "question_text": "Test",
+            "question_type": "multiple_choice",
+            "rating_scale": null,
             "position": 0,
             "options": [
-                "Strongly Disagree",
-                "Disagree",
-                "Neutral",
-                "Agree",
-                "Strongly Agree"
+                "Test 1",
+                "Test 2",
+                "Test 3"
             ],
             "is_required": 1,
             "condition_question_id": null,
@@ -21,16 +20,33 @@
             "condition_value": null
         },
         {
-            "id": "q_1773295417778_1981",
-            "question_text": "How many percent",
-            "question_type": "text",
+            "id": 90,
+            "question_text": "2 Test",
+            "question_type": "checkbox",
+            "rating_scale": null,
             "position": 1,
+            "options": [
+                "1",
+                "2",
+                "3"
+            ],
+            "is_required": 1,
+            "condition_question_id": null,
+            "condition_type": "equals",
+            "condition_value": null
+        },
+        {
+            "id": 91,
+            "question_text": "Seret",
+            "question_type": "text",
+            "rating_scale": null,
+            "position": 2,
             "options": [],
             "is_required": 1,
-            "condition_question_id": 65,
+            "condition_question_id": 89,
             "condition_type": "equals",
-            "condition_value": "Agree"
+            "condition_value": "Test 1"
         }
     ],
-    "form_id": 22
+    "form_id": 23
 }

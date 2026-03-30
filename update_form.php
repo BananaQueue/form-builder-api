@@ -36,8 +36,6 @@ require_once 'db.php';
 $json = file_get_contents('php://input');
 $data = json_decode($json, true);
 
-file_put_contents('debug_update.json', json_encode($data, JSON_PRETTY_PRINT));
-
 // Validate data
 if (!$data || !isset($data['form_id']) || !isset($data['title']) || !isset($data['questions'])) {
     http_response_code(400);
@@ -63,34 +61,50 @@ try {
     $stmt = $pdo->prepare("DELETE FROM questions WHERE form_id = ?");
     $stmt->execute([$formId]);
 
-    // Insert updated questions
-    $questionStmt = $pdo->prepare("INSERT INTO questions (form_id, question_text, question_type, rating_scale, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
-
     // First pass: Insert all questions and map temporary IDs to database IDs
     $questionIdMap = [];
 
+    $questionStmt = $pdo->prepare("
+        INSERT INTO questions (
+            form_id, 
+            question_text, 
+            question_type, 
+            rating_scale, 
+            number_min, 
+            number_max, 
+            number_step, 
+            datetime_type, 
+            position, 
+            is_required, 
+            condition_question_id, 
+            condition_type, 
+            condition_value
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+
+    $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
+
     foreach ($questions as $index => $question) {
-
-        $questionText = $question['question_text'] ?? ($question['text'] ?? '');
-        $questionType = $question['question_type'] ?? ($question['type'] ?? 'text');
-
         $questionStmt->execute([
             $formId,
-            $questionText,
-            $questionType,
+            $question['question_text'] ?? $question['text'],
+            $question['question_type'] ?? $question['type'],
             $question['rating_scale'] ?? null,
-            $index,
+            $question['number_min'] ?? null,
+            $question['number_max'] ?? null,
+            $question['number_step'] ?? null,
+            $question['datetime_type'] ?? null,
+            $question['position'] ?? $index,
             $question['is_required'] ?? 1,
             null,
             $question['condition_type'] ?? 'equals',
             null
         ]);
-
+        
         $dbQuestionId = $pdo->lastInsertId();
-        $clientTempId = $question['id'] ?? $index;
-        $questionIdMap[$clientTempId] = $dbQuestionId;
-
+        $questionIdMap[$question['id']] = $dbQuestionId;
+        
+        // Insert options
         if (isset($question['options']) && is_array($question['options'])) {
             foreach ($question['options'] as $optIndex => $option) {
                 $optionStmt->execute([
@@ -102,14 +116,14 @@ try {
         }
     }
 
-    // Second pass: Update conditional logic
+    // Second pass: Update conditional logic references
     $updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?");
 
     foreach ($questions as $index => $question) {
         if (isset($question['condition_question_id']) && $question['condition_question_id']) {
             $dbQuestionId = $questionIdMap[$question['id']];
             $conditionDbId = $questionIdMap[$question['condition_question_id']] ?? null;
-
+            
             if ($conditionDbId) {
                 $updateConditionStmt->execute([
                     $conditionDbId,
@@ -140,3 +154,4 @@ try {
         'message' => $e->getMessage()
     ]);
 }
+?>
