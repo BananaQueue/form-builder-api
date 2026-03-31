@@ -46,7 +46,7 @@ if (!$data || !isset($data['form_id']) || !isset($data['title']) || !isset($data
 
 $formId = $data['form_id'];
 $title = $data['title'];
-$description = $data['description'] ?? '';
+$description = $data['description'] ?? "\u00A0"; // Use non-breaking space if description is empty
 $categoryId = $data['category_id'] ?? 1;
 $questions = $data['questions'];
 

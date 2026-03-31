@@ -60,7 +60,7 @@ try {
     $stmt = $pdo->prepare("INSERT INTO forms (title, description, category_id) VALUES (?, ?, ?)");
     $stmt->execute([
         $data['title'],
-        $data['description'] ?? '',
+        $data['description'] ?? "\u00A0", // Use non-breaking space if description is empty
         $data['category_id'] ?? 1  // Default to 1 (General) if not provided
     ]);
 
