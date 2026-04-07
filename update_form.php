@@ -74,7 +74,7 @@ try {
             number_min, 
             number_max, 
             number_step, 
-            datetime_type, 
+            datetime_type,
             position, 
             is_required, 
             condition_question_id, 
