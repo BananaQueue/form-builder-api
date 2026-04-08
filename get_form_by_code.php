@@ -1,5 +1,4 @@
 <?php
-// Enable error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -23,30 +22,27 @@ header('Access-Control-Allow-Methods: GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Content-Type: application/json');
 
-// Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-// Include database connection
 require_once 'db.php';
 
-// Get form_id from URL parameter
-$form_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+// Get form_code from URL parameter
+$form_code = isset($_GET['code']) ? trim($_GET['code']) : '';
 
-if (!$form_id) {
+if (!$form_code) {
     http_response_code(400);
-    echo json_encode(['error' => 'Form ID is required']);
+    echo json_encode(['error' => 'Form code is required']);
     exit();
 }
 
 try {
-    // Get form details
+    // Get form details by code
     $stmt = $pdo->prepare("
         SELECT 
             f.id,
-            f.form_code,
             f.title,
             f.description,
             f.category_id,
@@ -54,40 +50,40 @@ try {
             f.created_at
         FROM forms f
         LEFT JOIN categories c ON f.category_id = c.id
-        WHERE f.id = ?
+        WHERE f.form_code = ?
     ");
-    $stmt->execute([$form_id]);
+    $stmt->execute([$form_code]);
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    
     if (!$form) {
         http_response_code(404);
         echo json_encode(['error' => 'Form not found']);
         exit();
     }
-
+    
     // Get questions for this form
     $stmt = $pdo->prepare("
-    SELECT 
-        id,
-        question_text,
-        question_type,
-        rating_scale,
-        number_min,
-        number_max,
-        number_step,
-        datetime_type,
-        position,
-        is_required,
-        condition_question_id,
-        condition_type,
-        condition_value
-    FROM questions
-    WHERE form_id = ?
-    ORDER BY position ASC
+        SELECT 
+            id,
+            question_text,
+            question_type,
+            rating_scale,
+            number_min,
+            number_max,
+            number_step,
+            datetime_type,
+            position,
+            is_required,
+            condition_question_id,
+            condition_type,
+            condition_value
+        FROM questions
+        WHERE form_id = ?
+        ORDER BY position ASC
     ");
-    $stmt->execute([$form_id]);
+    $stmt->execute([$form['id']]);
     $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+    
     // For each question, get its options
     foreach ($questions as &$question) {
         $stmt = $pdo->prepare("
@@ -100,25 +96,24 @@ try {
         ");
         $stmt->execute([$question['id']]);
         $options = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Extract just the option text into an array
-        $question['options'] = array_map(function ($opt) {
+        
+        $question['options'] = array_map(function($opt) {
             return $opt['option_text'];
         }, $options);
     }
-
-    // Add questions to form data
+    
     $form['questions'] = $questions;
-
-    // Return success with form data
+    
     echo json_encode([
         'success' => true,
         'form' => $form
     ]);
+    
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
-        'error' => 'Failed to retrieve form details',
+        'error' => 'Failed to retrieve form',
         'message' => $e->getMessage()
     ]);
 }
+?>

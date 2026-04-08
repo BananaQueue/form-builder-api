@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // Include database connection
 require_once 'db.php';
 require_once 'question_map_helpers.php';
+require_once 'generate_form_code.php';
 
 // Get JSON data from request
 $json = file_get_contents('php://input');
@@ -57,11 +58,12 @@ try {
     $pdo->beginTransaction();
 
     // Insert form with category
-    $stmt = $pdo->prepare("INSERT INTO forms (title, description, category_id) VALUES (?, ?, ?)");
+    $stmt = $pdo->prepare("INSERT INTO forms (title, description, category_id, form_code) VALUES (?, ?, ?, ?)");
     $stmt->execute([
         $data['title'],
         $data['description'] ?? "\u00A0", // Use non-breaking space if description is empty
-        $data['category_id'] ?? 1  // Default to 1 (General) if not provided
+        $data['category_id'] ?? 1,  // Default to 1 (General) if not provided
+        $formCode = generateFormCodeWithSlug($pdo, $data['title']) // Generate unique form code
     ]);
 
     // Get the ID of the inserted form
@@ -158,7 +160,8 @@ $updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id
     echo json_encode([
         'success' => true,
         'message' => 'Form saved successfully',
-        'form_id' => $formId
+        'form_id' => $formId,
+        'form_code' => $formCode
     ]);
 } catch (Exception $e) {
     // Rollback transaction on error

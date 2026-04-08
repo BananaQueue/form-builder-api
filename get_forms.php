@@ -37,6 +37,7 @@ try {
     $stmt = $pdo->query("
     SELECT 
         f.id,
+        f.form_code,
         f.title,
         f.description,
         f.created_at,
