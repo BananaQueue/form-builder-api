@@ -54,6 +54,51 @@ try {
     // Start transaction
     $pdo->beginTransaction();
 
+    $stmt = $pdo->query("SHOW COLUMNS FROM questions");
+    $questionColumns = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
+        $questionColumns[$column['Field']] = true;
+    }
+
+    $questionInsertColumns = [
+        'form_id',
+        'question_text',
+        'question_type',
+    ];
+    $questionValueResolvers = [
+        fn($question, $index, $formId) => $formId,
+        fn($question, $index) => $question['question_text'] ?? $question['text'],
+        fn($question, $index) => $question['question_type'] ?? $question['type'],
+    ];
+
+    $optionalQuestionColumns = [
+        'rating_scale' => fn($question) => $question['rating_scale'] ?? null,
+        'number_min' => fn($question) => $question['number_min'] ?? null,
+        'number_max' => fn($question) => $question['number_max'] ?? null,
+        'number_step' => fn($question) => $question['number_step'] ?? null,
+        'datetime_type' => fn($question) => $question['datetime_type'] ?? null,
+        'position' => fn($question, $index) => $question['position'] ?? $index,
+        'is_required' => fn($question) => $question['is_required'] ?? 1,
+        'condition_question_id' => fn($question) => null,
+        'condition_type' => fn($question) => $question['condition_type'] ?? 'equals',
+        'condition_value' => fn($question) => null,
+    ];
+
+    foreach ($optionalQuestionColumns as $columnName => $resolver) {
+        if (isset($questionColumns[$columnName])) {
+            $questionInsertColumns[] = $columnName;
+            $questionValueResolvers[] = $resolver;
+        }
+    }
+
+    $questionInsertSql = sprintf(
+        'INSERT INTO questions (%s) VALUES (%s)',
+        implode(', ', $questionInsertColumns),
+        implode(', ', array_fill(0, count($questionInsertColumns), '?'))
+    );
+
+    $canUpdateConditions = isset($questionColumns['condition_question_id']);
+
     // Update form details
     $stmt = $pdo->prepare("UPDATE forms SET title = ?, description = ?, category_id = ? WHERE id = ?");
     $stmt->execute([$title, $description, $categoryId, $formId]);
@@ -65,42 +110,16 @@ try {
     // First pass: Insert all questions and map temporary IDs to database IDs
     $questionIdMap = [];
 
-    $questionStmt = $pdo->prepare("
-        INSERT INTO questions (
-            form_id, 
-            question_text, 
-            question_type, 
-            rating_scale, 
-            number_min, 
-            number_max, 
-            number_step, 
-            datetime_type,
-            position, 
-            is_required, 
-            condition_question_id, 
-            condition_type, 
-            condition_value
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
+    $questionStmt = $pdo->prepare($questionInsertSql);
 
     $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
 
     foreach ($questions as $index => $question) {
-        $questionStmt->execute([
-            $formId,
-            $question['question_text'] ?? $question['text'],
-            $question['question_type'] ?? $question['type'],
-            $question['rating_scale'] ?? null,
-            $question['number_min'] ?? null,
-            $question['number_max'] ?? null,
-            $question['number_step'] ?? null,
-            $question['datetime_type'] ?? null,
-            $question['position'] ?? $index,
-            $question['is_required'] ?? 1,
-            null,
-            $question['condition_type'] ?? 'equals',
-            null
-        ]);
+        $values = [];
+        foreach ($questionValueResolvers as $resolver) {
+            $values[] = $resolver($question, $index, $formId);
+        }
+        $questionStmt->execute($values);
         
         $dbQuestionId = $pdo->lastInsertId();
         $questionIdMap[$question['id']] = $dbQuestionId;
@@ -118,24 +137,43 @@ try {
     }
 
     // Second pass: Update conditional logic references
-    $updateConditionStmt = $pdo->prepare("UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?");
+    if ($canUpdateConditions) {
+        $updateClauses = ['condition_question_id = ?'];
+        $conditionUpdateResolvers = [
+            fn($question, $conditionDbId) => $conditionDbId,
+        ];
 
-    foreach ($questions as $index => $question) {
-        $condRef = $question['condition_question_id'] ?? null;
-        if ($condRef === null || $condRef === '') {
-            continue;
+        if (isset($questionColumns['condition_type'])) {
+            $updateClauses[] = 'condition_type = ?';
+            $conditionUpdateResolvers[] = fn($question) => $question['condition_type'] ?? 'equals';
         }
-        $clientTempId = $question['id'] ?? $index;
-        $dbQuestionId = fb_question_map_get($questionIdMap, $clientTempId);
-        $conditionDbId = fb_question_map_get($questionIdMap, $condRef);
 
-        if ($dbQuestionId && $conditionDbId) {
-            $updateConditionStmt->execute([
-                $conditionDbId,
-                $question['condition_type'] ?? 'equals',
-                $question['condition_value'] ?? null,
-                $dbQuestionId
-            ]);
+        if (isset($questionColumns['condition_value'])) {
+            $updateClauses[] = 'condition_value = ?';
+            $conditionUpdateResolvers[] = fn($question) => $question['condition_value'] ?? null;
+        }
+
+        $updateConditionStmt = $pdo->prepare(
+            'UPDATE questions SET ' . implode(', ', $updateClauses) . ' WHERE id = ?'
+        );
+
+        foreach ($questions as $index => $question) {
+            $condRef = $question['condition_question_id'] ?? null;
+            if ($condRef === null || $condRef === '') {
+                continue;
+            }
+            $clientTempId = $question['id'] ?? $index;
+            $dbQuestionId = fb_question_map_get($questionIdMap, $clientTempId);
+            $conditionDbId = fb_question_map_get($questionIdMap, $condRef);
+
+            if ($dbQuestionId && $conditionDbId) {
+                $updateValues = [];
+                foreach ($conditionUpdateResolvers as $resolver) {
+                    $updateValues[] = $resolver($question, $conditionDbId);
+                }
+                $updateValues[] = $dbQuestionId;
+                $updateConditionStmt->execute($updateValues);
+            }
         }
     }
 

@@ -47,6 +47,45 @@ if (strpos($form_code, '-') !== false) {
 }
 
 try {
+    // Backward compatibility for databases that haven't run all migrations yet.
+    $formCodeColumnExists = false;
+    $questionColumns = [];
+
+    $stmt = $pdo->query("SHOW COLUMNS FROM forms LIKE 'form_code'");
+    $formCodeColumnExists = (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$formCodeColumnExists) {
+        http_response_code(500);
+        echo json_encode([
+            'error' => 'Failed to retrieve form',
+            'message' => 'The database is missing the form_code column in forms.'
+        ]);
+        exit();
+    }
+
+    $stmt = $pdo->query("SHOW COLUMNS FROM questions");
+    $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($columns as $column) {
+        $questionColumns[$column['Field']] = true;
+    }
+
+    $questionSelectColumns = [
+        "id",
+        "question_text",
+        "question_type",
+        isset($questionColumns['rating_scale']) ? "rating_scale" : "NULL AS rating_scale",
+        isset($questionColumns['number_min']) ? "number_min" : "NULL AS number_min",
+        isset($questionColumns['number_max']) ? "number_max" : "NULL AS number_max",
+        isset($questionColumns['number_step']) ? "number_step" : "NULL AS number_step",
+        isset($questionColumns['datetime_type']) ? "datetime_type" : "NULL AS datetime_type",
+        "position",
+        isset($questionColumns['is_required']) ? "is_required" : "1 AS is_required",
+        isset($questionColumns['condition_question_id']) ? "condition_question_id" : "NULL AS condition_question_id",
+        isset($questionColumns['condition_type']) ? "condition_type" : "'equals' AS condition_type",
+        isset($questionColumns['condition_value']) ? "condition_value" : "NULL AS condition_value",
+    ];
+    $questionSelectSql = implode(",\n            ", $questionSelectColumns);
+
     // Get form details by code
     $stmt = $pdo->prepare("
         SELECT 
@@ -98,19 +137,7 @@ try {
     // Get questions for this form
     $stmt = $pdo->prepare("
         SELECT 
-            id,
-            question_text,
-            question_type,
-            rating_scale,
-            number_min,
-            number_max,
-            number_step,
-            datetime_type,
-            position,
-            is_required,
-            condition_question_id,
-            condition_type,
-            condition_value
+            {$questionSelectSql}
         FROM questions
         WHERE form_id = ?
         ORDER BY position ASC
