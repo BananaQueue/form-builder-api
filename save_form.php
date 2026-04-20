@@ -107,11 +107,13 @@ $questionIdMap = []; // Maps React temp ID to database ID
         'form_id',
         'question_text',
         'question_type',
+        "description",
     ];
     $questionValueResolvers = [
         fn($question, $index, $formId) => $formId,
         fn($question, $index) => $question['question_text'] ?? ($question['text'] ?? ''),
         fn($question, $index) => $question['question_type'] ?? ($question['type'] ?? 'text'),
+        fn($question) => $question['description'] ?? null,
     ];
 
     $optionalQuestionColumns = [

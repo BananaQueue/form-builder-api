@@ -64,6 +64,7 @@ try {
         'form_id',
         'question_text',
         'question_type',
+        "description",
     ];
     $questionValueResolvers = [
         fn($question, $index, $formId) => $formId,

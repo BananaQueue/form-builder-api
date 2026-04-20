@@ -20,6 +20,7 @@ function fb_build_question_select_sql(array $questionColumns): string
         "id",
         "question_text",
         "question_type",
+        "description",
         isset($questionColumns['rating_scale']) ? "rating_scale" : "NULL AS rating_scale",
         isset($questionColumns['number_min']) ? "number_min" : "NULL AS number_min",
         isset($questionColumns['number_max']) ? "number_max" : "NULL AS number_max",
