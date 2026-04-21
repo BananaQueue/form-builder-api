@@ -64,7 +64,6 @@ try {
         'form_id',
         'question_text',
         'question_type',
-        "description",
     ];
     $questionValueResolvers = [
         fn($question, $index, $formId) => $formId,
@@ -73,6 +72,7 @@ try {
     ];
 
     $optionalQuestionColumns = [
+        'description' => fn($question) => $question['description'] ?? null, 
         'rating_scale' => fn($question) => $question['rating_scale'] ?? null,
         'number_min' => fn($question) => $question['number_min'] ?? null,
         'number_max' => fn($question) => $question['number_max'] ?? null,
