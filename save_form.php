@@ -84,6 +84,12 @@ try {
         $formInsertValues[] = $formCode;
     }
 
+    if (isset($formColumns['privacy_notice'])) {
+        $formInsertColumns[] = 'privacy_notice';
+        // ?? null means: use the value if it exists, otherwise use null
+        $formInsertValues[] = $data['privacy_notice'] ?? null;
+    }
+
     $stmt = $pdo->prepare(sprintf(
         'INSERT INTO forms (%s) VALUES (%s)',
         implode(', ', $formInsertColumns),

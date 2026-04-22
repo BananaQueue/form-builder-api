@@ -49,6 +49,7 @@ $title = $data['title'];
 $description = $data['description'] ?? "\u00A0"; // Use non-breaking space if description is empty
 $categoryId = $data['category_id'] ?? 1;
 $questions = $data['questions'];
+$privacyNotice = $data['privacy_notice'] ?? null;
 
 try {
     // Start transaction
@@ -59,6 +60,27 @@ try {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
         $questionColumns[$column['Field']] = true;
     }
+
+    $stmt = $pdo->query("SHOW COLUMNS FROM forms");
+    $formColumns = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
+        $formColumns[$column['Field']] = true;
+    }
+
+    if (isset($formColumns['privacy_notice'])) {
+        // The column exists — update all four fields including privacy_notice
+        $stmt = $pdo->prepare(
+            "UPDATE forms SET title = ?, description = ?, category_id = ?, privacy_notice = ? WHERE id = ?"
+        );
+        $stmt->execute([$title, $description, $categoryId, $privacyNotice, $formId]);
+    } else {
+        // The column doesn't exist yet — update without it (safe fallback)
+        $stmt = $pdo->prepare(
+            "UPDATE forms SET title = ?, description = ?, category_id = ? WHERE id = ?"
+        );
+        $stmt->execute([$title, $description, $categoryId, $formId]);
+    }
+
 
     $questionInsertColumns = [
         'form_id',
@@ -72,7 +94,7 @@ try {
     ];
 
     $optionalQuestionColumns = [
-        'description' => fn($question) => $question['description'] ?? null, 
+        'description' => fn($question) => $question['description'] ?? null,
         'rating_scale' => fn($question) => $question['rating_scale'] ?? null,
         'number_min' => fn($question) => $question['number_min'] ?? null,
         'number_max' => fn($question) => $question['number_max'] ?? null,
@@ -121,10 +143,10 @@ try {
             $values[] = $resolver($question, $index, $formId);
         }
         $questionStmt->execute($values);
-        
+
         $dbQuestionId = $pdo->lastInsertId();
         $questionIdMap[$question['id']] = $dbQuestionId;
-        
+
         // Insert options
         if (isset($question['options']) && is_array($question['options'])) {
             foreach ($question['options'] as $optIndex => $option) {
@@ -197,4 +219,3 @@ try {
         'message' => $e->getMessage()
     ]);
 }
-?>
