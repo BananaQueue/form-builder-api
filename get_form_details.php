@@ -117,9 +117,13 @@ try {
             f.description,
             f.category_id,
             c.name as category_name,
+            COUNT(DISTINCT CASE 
+            WHEN q.question_type != 'section' THEN q.id 
+            END) as question_count,
             f.created_at
         FROM forms f
         LEFT JOIN categories c ON f.category_id = c.id
+        LEFT JOIN questions q ON f.id = q.form_id
         WHERE f.id = ?
     ");
     $stmt->execute([$form_id]);
