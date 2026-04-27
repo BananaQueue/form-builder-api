@@ -44,44 +44,83 @@ if (!$data || !isset($data['form_id']) || !isset($data['title']) || !isset($data
     exit();
 }
 
-$formId = $data['form_id'];
-$title = $data['title'];
-$description = $data['description'] ?? "\u00A0"; // Use non-breaking space if description is empty
-$categoryId = $data['category_id'] ?? 1;
-$questions = $data['questions'];
+$formId      = $data['form_id'];
+$title       = $data['title'];
+$description = $data['description'] ?? "\u00A0";
+$categoryId  = $data['category_id'] ?? 1;
+$questions   = $data['questions'];
+
+// NEW: Read privacy_notice from the incoming JSON.
+// If React sent null (textarea was blank), this will be null.
+// If React sent a string, this will be that string.
+// The ?? null ensures we get null rather than an error if the key
+// doesn't exist at all in the JSON.
 $privacyNotice = $data['privacy_notice'] ?? null;
+
+// Read step_mode from the incoming JSON.
+// Falls back to 0 (continuous form) if the key is missing entirely.
+// We use 0 rather than null because the column is NOT NULL.
+$stepMode = $data['step_mode'] ?? 0;
 
 try {
     // Start transaction
     $pdo->beginTransaction();
 
+    // Check which columns exist in the questions table
     $stmt = $pdo->query("SHOW COLUMNS FROM questions");
     $questionColumns = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
         $questionColumns[$column['Field']] = true;
     }
 
+    // Check which columns exist in the forms table.
+    // We need this before building the UPDATE so we only reference
+    // columns that actually exist — avoids SQL errors on older databases.
     $stmt = $pdo->query("SHOW COLUMNS FROM forms");
     $formColumns = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
         $formColumns[$column['Field']] = true;
     }
 
+    // ── Update the forms row ───────────────────────────────────────────────
+    // We build the SET clause dynamically so the query works regardless
+    // of which optional columns exist in the database. This means the
+    // script works even if migrations 003 or 005 haven't been run yet.
+    //
+    // We always update: title, description, category_id
+    // Optional: privacy_notice (migration 003), step_mode (migration 005)
+
+    $setClauses = ["title = ?", "description = ?", "category_id = ?"];
+    $updateValues = [$title, $description, $categoryId];
+
     if (isset($formColumns['privacy_notice'])) {
-        // The column exists — update all four fields including privacy_notice
-        $stmt = $pdo->prepare(
-            "UPDATE forms SET title = ?, description = ?, category_id = ?, privacy_notice = ? WHERE id = ?"
-        );
-        $stmt->execute([$title, $description, $categoryId, $privacyNotice, $formId]);
-    } else {
-        // The column doesn't exist yet — update without it (safe fallback)
-        $stmt = $pdo->prepare(
-            "UPDATE forms SET title = ?, description = ?, category_id = ? WHERE id = ?"
-        );
-        $stmt->execute([$title, $description, $categoryId, $formId]);
+        $setClauses[] = "privacy_notice = ?";
+        $updateValues[] = $privacyNotice;
     }
 
+    if (isset($formColumns['step_mode'])) {
+        $setClauses[] = "step_mode = ?";
+        $updateValues[] = $stepMode;
+    }
 
+    // Append the WHERE clause value last
+    $updateValues[] = $formId;
+
+    $stmt = $pdo->prepare(
+        "UPDATE forms SET " . implode(", ", $setClauses) . " WHERE id = ?"
+    );
+    $stmt->execute($updateValues);
+
+    // ── Rebuild questions ──────────────────────────────────────────────────
+    // The simplest and most reliable way to update questions is to:
+    // 1. Delete all existing questions for this form
+    // 2. Re-insert them fresh from what React sent
+    // CASCADE on the foreign key handles deleting options automatically.
+
+    $stmt = $pdo->prepare("DELETE FROM questions WHERE form_id = ?");
+    $stmt->execute([$formId]);
+
+    // Build the question INSERT statement dynamically
     $questionInsertColumns = [
         'form_id',
         'question_text',
@@ -94,17 +133,16 @@ try {
     ];
 
     $optionalQuestionColumns = [
-        'description' => fn($question) => $question['description'] ?? null,
-        'rating_scale' => fn($question) => $question['rating_scale'] ?? null,
-        'number_min' => fn($question) => $question['number_min'] ?? null,
-        'number_max' => fn($question) => $question['number_max'] ?? null,
-        'number_step' => fn($question) => $question['number_step'] ?? null,
-        'datetime_type' => fn($question) => $question['datetime_type'] ?? null,
-        'position' => fn($question, $index) => $question['position'] ?? $index,
-        'is_required' => fn($question) => $question['is_required'] ?? 1,
-        'condition_question_id' => fn($question) => null,
-        'condition_type' => fn($question) => $question['condition_type'] ?? 'equals',
-        'condition_value' => fn($question) => null,
+        'rating_scale'          => fn($question) => $question['rating_scale'] ?? null,
+        'number_min'            => fn($question) => $question['number_min'] ?? null,
+        'number_max'            => fn($question) => $question['number_max'] ?? null,
+        'number_step'           => fn($question) => $question['number_step'] ?? null,
+        'datetime_type'         => fn($question) => $question['datetime_type'] ?? null,
+        'position'              => fn($question, $index) => $question['position'] ?? $index,
+        'is_required'           => fn($question) => $question['is_required'] ?? 1,
+        'condition_question_id' => fn($question) => null, // Filled in second pass
+        'condition_type'        => fn($question) => $question['condition_type'] ?? 'equals',
+        'condition_value'       => fn($question) => null, // Filled in second pass
     ];
 
     foreach ($optionalQuestionColumns as $columnName => $resolver) {
@@ -122,20 +160,12 @@ try {
 
     $canUpdateConditions = isset($questionColumns['condition_question_id']);
 
-    // Update form details
-    $stmt = $pdo->prepare("UPDATE forms SET title = ?, description = ?, category_id = ? WHERE id = ?");
-    $stmt->execute([$title, $description, $categoryId, $formId]);
-
-    // Delete existing questions and options (CASCADE will handle options)
-    $stmt = $pdo->prepare("DELETE FROM questions WHERE form_id = ?");
-    $stmt->execute([$formId]);
-
-    // First pass: Insert all questions and map temporary IDs to database IDs
+    // First pass: insert questions, build the client-ID → DB-ID map
     $questionIdMap = [];
-
-    $questionStmt = $pdo->prepare($questionInsertSql);
-
-    $optionStmt = $pdo->prepare("INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)");
+    $questionStmt  = $pdo->prepare($questionInsertSql);
+    $optionStmt    = $pdo->prepare(
+        "INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)"
+    );
 
     foreach ($questions as $index => $question) {
         $values = [];
@@ -147,19 +177,15 @@ try {
         $dbQuestionId = $pdo->lastInsertId();
         $questionIdMap[$question['id']] = $dbQuestionId;
 
-        // Insert options
+        // Insert options for this question
         if (isset($question['options']) && is_array($question['options'])) {
             foreach ($question['options'] as $optIndex => $option) {
-                $optionStmt->execute([
-                    $dbQuestionId,
-                    $option,
-                    $optIndex
-                ]);
+                $optionStmt->execute([$dbQuestionId, $option, $optIndex]);
             }
         }
     }
 
-    // Second pass: Update conditional logic references
+    // Second pass: wire up conditional question references
     if ($canUpdateConditions) {
         $updateClauses = ['condition_question_id = ?'];
         $conditionUpdateResolvers = [
@@ -185,8 +211,8 @@ try {
             if ($condRef === null || $condRef === '') {
                 continue;
             }
-            $clientTempId = $question['id'] ?? $index;
-            $dbQuestionId = fb_question_map_get($questionIdMap, $clientTempId);
+            $clientTempId  = $question['id'] ?? $index;
+            $dbQuestionId  = fb_question_map_get($questionIdMap, $clientTempId);
             $conditionDbId = fb_question_map_get($questionIdMap, $condRef);
 
             if ($dbQuestionId && $conditionDbId) {
@@ -203,19 +229,19 @@ try {
     // Commit transaction
     $pdo->commit();
 
-    // Return success response
     echo json_encode([
         'success' => true,
         'message' => 'Form updated successfully',
         'form_id' => $formId
     ]);
+
 } catch (Exception $e) {
-    // Rollback transaction on error
     $pdo->rollBack();
 
     http_response_code(500);
     echo json_encode([
-        'error' => 'Failed to update form',
+        'error'   => 'Failed to update form',
         'message' => $e->getMessage()
     ]);
 }
+?>

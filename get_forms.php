@@ -43,7 +43,9 @@ try {
         f.created_at,
         f.category_id,
         c.name as category_name,
-        COUNT(DISTINCT q.id) as question_count,
+        COUNT(DISTINCT CASE 
+            WHEN q.question_type != 'section' THEN q.id 
+            END) as question_count,
         COUNT(DISTINCT r.id) as response_count
     FROM forms f
     LEFT JOIN categories c ON f.category_id = c.id

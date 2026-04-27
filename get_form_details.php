@@ -55,6 +55,11 @@ try {
     $stmt = $pdo->query("SHOW COLUMNS FROM forms LIKE 'privacy_notice'");
     $privacyNoticeColumnExists = (bool) $stmt->fetch(PDO::FETCH_ASSOC);
 
+    // Check if step_mode column exists (added in migration 005).
+    // Same one-liner pattern used for privacy_notice directly above.
+    $stmt = $pdo->query("SHOW COLUMNS FROM forms LIKE 'step_mode'");
+    $stepModeColumnExists = (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+
     $stmt = $pdo->query("SHOW COLUMNS FROM questions");
     $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $questionColumns = [];
@@ -75,6 +80,13 @@ try {
     $privacyNoticeSelect = $privacyNoticeColumnExists
         ? "f.privacy_notice,"
         : "NULL AS privacy_notice,";
+
+    // Same pattern for step_mode.
+    // If missing → return 0 (continuous form) so the frontend always
+    // gets an integer it can compare with == 1, never undefined.
+    $stepModeSelect = $stepModeColumnExists
+        ? "f.step_mode,"
+        : "0 AS step_mode,";
 
     // Build the question SELECT columns list
     $questionSelectColumns = [
@@ -100,6 +112,7 @@ try {
             f.id,
             {$formCodeSelect}
             {$privacyNoticeSelect}
+            {$stepModeSelect}
             f.title,
             f.description,
             f.category_id,
