@@ -1,4 +1,5 @@
 <?php
+session_start();
 // Error reporting: log errors, but don't output warnings/notices as HTML (breaks JSON responses)
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -88,8 +89,18 @@ try {
     $formCode = null;
     if (isset($formColumns['form_code'])) {
         $formInsertColumns[] = 'form_code';
-        $formCode = generateFormCodeWithSlug($pdo, $data['title']);
+        $formCode = generateFormCodeWithSlug($pdo, 7);
         $formInsertValues[] = $formCode;
+    }
+
+    // Record which user created this form.
+    // We check the column exists first (migration 007) before inserting,
+    // the same way we handle every other optional column in this file.
+    // $_SESSION['user_id'] was set during login and lives server-side —
+    // the browser cannot tamper with it.
+    if (isset($formColumns['created_by'])) {
+        $formInsertColumns[] = 'created_by';
+        $formInsertValues[] = $_SESSION['user_id'] ?? null;
     }
 
     // NEW: Include privacy_notice if that column exists (added in migration 003).
@@ -243,7 +254,6 @@ try {
         'form_id'   => $formId,
         'form_code' => $formCode
     ]);
-
 } catch (Exception $e) {
     // Something went wrong — roll back so we don't leave partial data
     $pdo->rollBack();

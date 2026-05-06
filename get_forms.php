@@ -1,9 +1,13 @@
 <?php
-// Enable error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// CORS headers
+// ── Session must start before we can read who is logged in ──────────────────
+// session_start() tells PHP "look up the session cookie the browser sent
+// and load the matching $_SESSION data into memory."
+// Without this line, $_SESSION is always empty.
+session_start();
+
 $allowed_origins = [
     'http://localhost:5173',
     'http://localhost:5174',
@@ -23,51 +27,67 @@ header('Access-Control-Allow-Methods: GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Content-Type: application/json');
 
-// Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-// Include database connection
+// ── Authentication check ────────────────────────────────────────────────────
+// If there is no valid session, we refuse to return any data.
+// http_response_code(401) means "Unauthorized" — you must log in first.
+if (empty($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Not authenticated']);
+    exit();
+}
+
+// We know who is asking — read their user ID from the session.
+// This is safe because the session lives on the SERVER, not in the browser.
+// The user cannot fake or modify this value.
+$currentUserId = $_SESSION['user_id'];
+
 require_once 'db.php';
 
 try {
-    // Get all forms with question count
-    $stmt = $pdo->query("
-    SELECT 
-        f.id,
-        f.form_code,
-        f.title,
-        f.description,
-        f.created_at,
-        f.category_id,
-        c.name as category_name,
-        COUNT(DISTINCT CASE 
-            WHEN q.question_type != 'section' THEN q.id 
-            END) as question_count,
-        COUNT(DISTINCT r.id) as response_count
-    FROM forms f
-    LEFT JOIN categories c ON f.category_id = c.id
-    LEFT JOIN questions q ON f.id = q.form_id
-    LEFT JOIN responses r ON f.id = r.form_id
-    GROUP BY f.id, c.name
-    ORDER BY f.created_at DESC
+    // ── The key change: WHERE f.created_by = ? ──────────────────────────────
+    // The ? is a placeholder. We pass $currentUserId as the value.
+    // PDO substitutes it safely — this prevents SQL injection.
+    // Only forms belonging to the logged-in user are returned.
+    $stmt = $pdo->prepare("
+        SELECT 
+            f.id,
+            f.form_code,
+            f.title,
+            f.description,
+            f.created_at,
+            f.category_id,
+            c.name as category_name,
+            COUNT(DISTINCT CASE 
+                WHEN q.question_type != 'section' THEN q.id 
+                END) as question_count,
+            COUNT(DISTINCT r.id) as response_count
+        FROM forms f
+        LEFT JOIN categories c ON f.category_id = c.id
+        LEFT JOIN questions q ON f.id = q.form_id
+        LEFT JOIN responses r ON f.id = r.form_id
+        WHERE f.created_by = ?
+        GROUP BY f.id, c.name
+        ORDER BY f.created_at DESC
     ");
-    
+
+    $stmt->execute([$currentUserId]);
     $forms = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Return success with forms data
+
     echo json_encode([
         'success' => true,
-        'forms' => $forms
+        'forms'   => $forms,
     ]);
-    
+
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
-        'error' => 'Failed to retrieve forms',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to retrieve forms',
+        'message' => $e->getMessage(),
     ]);
 }
 ?>

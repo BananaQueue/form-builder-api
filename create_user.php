@@ -2,8 +2,8 @@
 require_once 'db.php';
 
 // ── Change these before running ──────────────────────────────────────────────
-$username = 'admin_ORD';           // The login username
-$password = '0RD@dm1n';  // The plain text password (only used here to hash it)
+$username = 'admin_FAD';           // The login username
+$password = 'FAD@dm1n';  // The plain text password (only used here to hash it)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // password_hash() scrambles the password using the bcrypt algorithm.
