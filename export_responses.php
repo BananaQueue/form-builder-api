@@ -80,7 +80,7 @@ try {
     $output = fopen('php://output', 'w');
     
     // Write CSV header row
-    $headers = ['Response ID', 'Submitted At'];
+    $headers = ['Submitted At'];
     foreach ($questions as $question) {
         $headers[] = $question['question_text'];
     }
@@ -88,7 +88,7 @@ try {
     
     // Write data rows
     foreach ($responses as $response) {
-        $row = [$response['id'], $response['submitted_at']];
+        $row = [$response['submitted_at']];
         
         // Get answers for this response
         foreach ($questions as $question) {
