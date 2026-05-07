@@ -55,7 +55,7 @@ $questions   = $data['questions'];
 // If React sent a string, this will be that string.
 // The ?? null ensures we get null rather than an error if the key
 // doesn't exist at all in the JSON.
-$privacyNotice = $data['privacy_notice'] ?? null;
+$privacyNotice = 1;
 
 // Read step_mode from the incoming JSON.
 // Falls back to 0 (continuous form) if the key is missing entirely.

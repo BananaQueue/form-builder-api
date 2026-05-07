@@ -108,7 +108,7 @@ try {
     // send it at all, we store NULL in the database — which means "no modal".
     if (isset($formColumns['privacy_notice'])) {
         $formInsertColumns[] = 'privacy_notice';
-        $formInsertValues[] = $data['privacy_notice'] ?? null;
+        $formInsertValues[] = 1;
     }
 
     // Include step_mode if that column exists (added in migration 005).
