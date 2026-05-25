@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 16, 2026 at 03:25 AM
+-- Generation Time: May 25, 2026 at 03:19 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -39,16 +39,29 @@ CREATE TABLE `answers` (
 --
 
 INSERT INTO `answers` (`id`, `response_id`, `question_id`, `answer_text`) VALUES
-(17, 7, 60, 'Permanent'),
-(18, 7, 61, ' Project Development Officer I'),
-(20, 9, 92, 'Test 2,Test 3'),
-(21, 9, 93, '1'),
-(22, 9, 94, ''),
-(23, 10, 57, 'DENR'),
-(24, 10, 58, ''),
-(25, 11, 57, 'EMB'),
-(26, 11, 58, 'ORD'),
-(27, 12, 305, 'fdsafsadf@com');
+(61, 20, 468, 'IIS UPDATES'),
+(62, 20, 469, '2026-05-11'),
+(63, 20, 470, 'Darwin Karl Bactuitis Pua'),
+(64, 20, 471, 'Project Development Assistant'),
+(65, 20, 472, '27'),
+(66, 20, 473, '0.583'),
+(67, 20, 474, 'darwinpua.engr@gmail.com'),
+(68, 20, 475, ''),
+(69, 20, 476, 'Agree'),
+(70, 20, 477, 'Agree'),
+(71, 20, 478, 'Agree'),
+(72, 20, 479, 'Agree'),
+(73, 20, 480, ''),
+(74, 20, 481, 'Agree'),
+(75, 20, 482, 'Agree'),
+(76, 20, 483, 'Agree'),
+(77, 20, 484, 'Agree'),
+(78, 20, 485, 'Agree'),
+(79, 20, 486, 'Agree'),
+(80, 20, 487, 'Yes'),
+(81, 20, 488, 'No'),
+(82, 20, 489, 'None'),
+(83, 20, 490, 'Very Good');
 
 -- --------------------------------------------------------
 
@@ -79,9 +92,12 @@ INSERT INTO `categories` (`id`, `name`, `created_at`) VALUES
 
 CREATE TABLE `forms` (
   `id` int(11) NOT NULL,
+  `created_by` int(11) DEFAULT NULL COMMENT 'FK to users.id — which user created this form',
   `form_code` varchar(20) DEFAULT NULL,
   `title` varchar(255) NOT NULL,
   `description` text DEFAULT NULL,
+  `privacy_notice` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0 = no privacy notice modal, 1 = show standard privacy notice on submit',
+  `step_mode` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0 = continuous form, 1 = multi-step form driven by section blocks',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `category_id` int(11) DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -90,15 +106,12 @@ CREATE TABLE `forms` (
 -- Dumping data for table `forms`
 --
 
-INSERT INTO `forms` (`id`, `form_code`, `title`, `description`, `created_at`, `category_id`) VALUES
-(18, 'qH7KGoqD', 'Conditional Test', 'Testing Conditional Question', '2026-03-11 02:30:56', 1),
-(21, 'H4COaKe3', 'EMPLOYMENT', 'Nkl;dsf;kog', '2026-03-12 02:00:57', 3),
-(22, 'qZf5mbva', 'Rating Test', 'Testing rating type', '2026-03-12 05:31:39', 2),
-(23, 'OTX63pE5', 'Test', 'Test Test', '2026-03-25 08:34:42', 1),
-(43, 'mQBjJUtF', 'End of Learning Evaluation', '', '2026-03-31 00:03:45', 3),
-(44, 'IyOYC1Bu', 'Learning Service Provider Evaluation Form', '', '2026-03-31 00:07:38', 3),
-(52, 'wG0whlQS', 'Employee Details Form', 'Form to record basic employee data', '2026-03-31 03:54:23', 1),
-(53, '7jr8k2E5', 'Email Test', 'Testing emial', '2026-04-07 08:23:03', 1);
+INSERT INTO `forms` (`id`, `created_by`, `form_code`, `title`, `description`, `privacy_notice`, `step_mode`, `created_at`, `category_id`) VALUES
+(43, 1, 'mQBjJUtF', 'End of Learning Evaluation', '', 1, 1, '2026-03-31 00:03:45', 3),
+(44, 1, 'IyOYC1Bu', 'Learning Service Provider Evaluation Form', '', 1, 0, '2026-03-31 00:07:38', 3),
+(52, 1, 'wG0whlQS', 'Employee Details Form', 'Form to record basic employee data', 1, 0, '2026-03-31 03:54:23', 2),
+(62, 1, 'form-ownership-Du4e8', 'Form Ownership', 'Test of form ownership', 1, 0, '2026-05-04 07:35:53', 1),
+(63, 2, 'finance-and-administ', 'Finance and Administrative Division Form', 'Form for the Finance and Administrative Division', 1, 0, '2026-05-05 00:54:32', 1);
 
 -- --------------------------------------------------------
 
@@ -110,6 +123,7 @@ CREATE TABLE `questions` (
   `id` int(11) NOT NULL,
   `form_id` int(11) NOT NULL,
   `question_text` text NOT NULL,
+  `description` text DEFAULT NULL,
   `question_type` varchar(50) NOT NULL,
   `rating_scale` varchar(50) DEFAULT NULL,
   `number_min` decimal(10,2) DEFAULT NULL,
@@ -127,71 +141,74 @@ CREATE TABLE `questions` (
 -- Dumping data for table `questions`
 --
 
-INSERT INTO `questions` (`id`, `form_id`, `question_text`, `question_type`, `rating_scale`, `number_min`, `number_max`, `number_step`, `datetime_type`, `position`, `is_required`, `condition_question_id`, `condition_type`, `condition_value`) VALUES
-(57, 18, 'Bureau', 'checkbox', NULL, NULL, NULL, NULL, NULL, 0, 1, NULL, 'equals', NULL),
-(58, 18, 'Division', 'text', NULL, NULL, NULL, NULL, NULL, 1, 1, 57, 'equals', 'EMB'),
-(60, 21, 'What is your current employment status? ', 'checkbox', NULL, NULL, NULL, NULL, NULL, 0, 1, NULL, 'equals', NULL),
-(61, 21, 'What is your Job Title?', 'multiple_choice', NULL, NULL, NULL, NULL, NULL, 1, 1, 60, 'equals', 'Permanent'),
-(78, 22, 'How many percent', 'text', NULL, NULL, NULL, NULL, NULL, 0, 1, NULL, 'equals', NULL),
-(79, 22, 'Do you agree?', 'rating', NULL, NULL, NULL, NULL, NULL, 1, 1, NULL, 'equals', NULL),
-(80, 22, 'Are you lying?', 'text', NULL, NULL, NULL, NULL, NULL, 2, 1, 78, 'is_answered', NULL),
-(92, 23, 'Test', 'multiple_choice', NULL, NULL, NULL, NULL, NULL, 0, 1, NULL, 'equals', NULL),
-(93, 23, '2 Test', 'checkbox', NULL, NULL, NULL, NULL, NULL, 1, 1, NULL, 'equals', NULL),
-(94, 23, 'Seret', 'text', NULL, NULL, NULL, NULL, NULL, 2, 1, 92, 'equals', 'Test 1'),
-(116, 43, 'Learning and Development Intervention Title', 'text', NULL, NULL, NULL, NULL, NULL, 0, 1, NULL, 'equals', NULL),
-(117, 43, 'Date/s (mm/dd/yyyy)', 'datetime', NULL, NULL, NULL, NULL, NULL, 1, 1, NULL, 'equals', NULL),
-(118, 43, 'Learner\'s Name (First Name, Middle Name, Surname)', 'text', NULL, NULL, NULL, NULL, NULL, 2, 1, NULL, 'equals', NULL),
-(119, 43, 'Learner\'s Position', 'text', NULL, NULL, NULL, NULL, NULL, 3, 1, NULL, 'equals', NULL),
-(120, 43, 'Learner\'s Age', 'number', NULL, NULL, NULL, NULL, NULL, 4, 1, NULL, 'equals', NULL),
-(121, 43, 'Email Address', 'text', NULL, NULL, NULL, NULL, NULL, 5, 1, NULL, 'equals', NULL),
-(122, 43, 'Objective of the Event: The objectives were clearly communicated', 'rating', 'satisfaction_5', NULL, NULL, NULL, NULL, 6, 1, NULL, 'equals', NULL),
-(123, 43, 'Objective of the Event: The objectives of the L&D intervention were attained', 'rating', 'satisfaction_5', NULL, NULL, NULL, NULL, 7, 1, NULL, 'equals', NULL),
-(124, 43, 'Topics: The Sequence of topics is logical and faciliated easier understanding', 'rating', 'satisfaction_5', NULL, NULL, NULL, NULL, 8, 1, NULL, 'equals', NULL),
-(125, 43, 'Topics: The intervention was comprehensive and provided my needed knwoledge', 'rating', 'satisfaction_5', NULL, NULL, NULL, NULL, 9, 1, NULL, 'equals', NULL),
-(126, 43, 'Topics: The intervention is relevant to my job', 'rating', 'agree_5', NULL, NULL, NULL, NULL, 10, 1, NULL, 'equals', NULL),
-(127, 43, 'Time Schedule: The time alloted for each session/section was sufficient', 'rating', 'agree_5', NULL, NULL, NULL, NULL, 11, 1, NULL, 'equals', NULL),
-(128, 43, 'Time Schedule: The time alloted for the training was sufficient ', 'rating', 'agree_5', NULL, NULL, NULL, NULL, 12, 1, NULL, 'equals', NULL),
-(129, 43, 'Methodology: The methodologies used were appropriate ', 'rating', 'agree_5', NULL, NULL, NULL, NULL, 13, 1, NULL, 'equals', NULL),
-(130, 43, 'Learning Event Team: The learning event team was attentive to the basic needs of learners', 'rating', 'agree_5', NULL, NULL, NULL, NULL, 14, 1, NULL, 'equals', NULL),
-(131, 43, 'Learning Event Team: The learning event team was organized and well-prepared', 'rating', 'agree_5', NULL, NULL, NULL, NULL, 15, 1, NULL, 'equals', NULL),
-(132, 43, 'How was your overall experience with the training?', 'rating', 'quality_5', NULL, NULL, NULL, NULL, 16, 1, NULL, 'equals', NULL),
-(133, 43, 'Overall, what did you gain from this learning?', 'text', NULL, NULL, NULL, NULL, NULL, 17, 1, NULL, 'equals', NULL),
-(134, 43, 'What part of the Learning Event do you think was least helpful? Why?', 'text', NULL, NULL, NULL, NULL, NULL, 18, 1, NULL, 'equals', NULL),
-(135, 43, 'Your comments or suggestions about this Learning Event.', 'text', NULL, NULL, NULL, NULL, NULL, 19, 1, NULL, 'equals', NULL),
-(244, 44, 'Learning and Developement Intervention Title', 'text', NULL, NULL, NULL, '1', 'date', 0, 1, NULL, 'equals', NULL),
-(245, 44, 'Date/s (mm/dd/yyyy)', 'datetime', NULL, NULL, NULL, '1', 'date', 1, 1, NULL, 'equals', NULL),
-(246, 44, 'Learner\'s Name (First Name, Middle Name, Surname)', 'text', NULL, NULL, NULL, '1', 'date', 2, 1, NULL, 'equals', NULL),
-(247, 44, 'Learner\'s Position', 'text', NULL, NULL, NULL, '1', 'date', 3, 1, NULL, 'equals', NULL),
-(248, 44, 'Learner\'s Age', 'number', NULL, 0.00, NULL, '1', NULL, 4, 1, NULL, 'equals', NULL),
-(249, 44, 'Years in the Department regarless of employement status/nature', 'number', NULL, NULL, NULL, '1', 'date', 5, 1, NULL, 'equals', NULL),
-(250, 44, 'Email Address', 'text', NULL, NULL, NULL, '1', 'date', 6, 1, NULL, 'equals', NULL),
-(251, 44, 'Content: The objectives of the event were clearly defined and communicated', 'rating', 'agree_5', NULL, NULL, '1', 'date', 7, 1, NULL, 'equals', NULL),
-(252, 44, 'Content: The objectives of the event were attained', 'rating', 'agree_5', NULL, NULL, '1', 'date', 8, 1, NULL, 'equals', NULL),
-(253, 44, 'Content: The time allotted for the training was sufficient', 'rating', 'agree_5', NULL, NULL, '1', 'date', 9, 1, NULL, 'equals', NULL),
-(254, 44, 'Content: The training has a good mix of theories and applications', 'rating', 'agree_5', NULL, NULL, '1', 'date', 10, 1, NULL, 'equals', NULL),
-(255, 44, 'Participation and interaction was encouraged', 'rating', 'agree_5', NULL, NULL, '1', 'date', 11, 1, NULL, 'equals', NULL),
-(256, 44, 'The electronic media used in the discussion assisted my learning and understanding of the topic', 'rating', 'agree_5', NULL, NULL, '1', 'date', 12, 1, NULL, 'equals', NULL),
-(257, 44, 'Relevant examples were provided for in-depth discussion', 'rating', 'agree_5', NULL, NULL, '1', 'date', 13, 1, NULL, 'equals', NULL),
-(258, 44, 'The training team was attentice to the needs of the learners', 'rating', 'agree_5', NULL, NULL, '1', 'date', 14, 1, NULL, 'equals', NULL),
-(259, 44, 'The trainers/lecturers were effective in presenting the topics', 'rating', 'agree_5', NULL, NULL, '1', 'date', 15, 1, NULL, 'equals', NULL),
-(260, 44, 'Overall, this is a helpful course that should be taken by other EMB-1 personnel', 'rating', 'agree_5', NULL, NULL, '1', 'date', 16, 1, NULL, 'equals', NULL),
-(261, 44, 'Do you recommend the training provider to conduct the same or other related trainings to EMB-1? Kindly expound your answer.', 'text', NULL, NULL, NULL, '1', 'date', 17, 1, NULL, 'equals', NULL),
-(262, 44, 'Apart from this Learning Service Provider, do you know other organizations/institutions that conduct similar or related learning interventions?', 'checkbox', NULL, NULL, NULL, '1', 'date', 18, 1, NULL, 'equals', NULL),
-(263, 44, 'Do you have any recommendations/comments to improve the performance of the training provider?', 'text', NULL, NULL, NULL, '1', 'date', 19, 1, NULL, 'equals', NULL),
-(264, 44, 'Overall, how was the performance of the Learning Service Provider?', 'rating', 'quality_5', NULL, NULL, '1', 'date', 20, 1, NULL, 'equals', NULL),
-(293, 52, 'Full Name (First name, Middle name, Surname)', 'text', NULL, NULL, NULL, '1', 'date', 0, 1, NULL, 'equals', NULL),
-(294, 52, 'Department or Bureau', 'checkbox', NULL, NULL, NULL, '1', 'date', 1, 1, NULL, 'equals', NULL),
-(295, 52, 'Division', 'checkbox', NULL, NULL, NULL, '1', 'date', 2, 1, 294, 'equals', 'Environmental Management Bureau'),
-(296, 52, 'Unit/Section', 'checkbox', NULL, NULL, NULL, '1', 'date', 3, 1, 295, 'equals', 'EMED'),
-(297, 52, 'Unit/Section', 'checkbox', NULL, NULL, NULL, '1', 'date', 4, 1, 295, 'equals', 'CPD'),
-(298, 52, 'Unit/Section', 'checkbox', NULL, NULL, NULL, '1', 'date', 5, 1, 295, 'equals', 'FAD'),
-(299, 52, 'Unit/Section', 'checkbox', NULL, NULL, NULL, '1', 'date', 6, 1, 295, 'equals', 'ORD'),
-(300, 52, 'Position', 'text', NULL, NULL, NULL, '1', 'date', 7, 1, NULL, 'equals', NULL),
-(301, 52, 'Address', 'text', NULL, NULL, NULL, '1', 'date', 8, 1, NULL, 'equals', NULL),
-(302, 52, 'Contact No', 'text', NULL, NULL, NULL, '1', 'date', 9, 1, NULL, 'equals', NULL),
-(303, 52, 'Birthdate (mm/dd/yyyy)', 'datetime', NULL, NULL, NULL, '1', 'date', 10, 1, NULL, 'equals', NULL),
-(304, 52, 'Email', 'text', NULL, NULL, NULL, '1', 'date', 11, 1, NULL, 'equals', NULL),
-(305, 53, 'Email address', 'email', NULL, NULL, NULL, NULL, NULL, 0, 1, NULL, 'equals', NULL);
+INSERT INTO `questions` (`id`, `form_id`, `question_text`, `description`, `question_type`, `rating_scale`, `number_min`, `number_max`, `number_step`, `datetime_type`, `position`, `is_required`, `condition_question_id`, `condition_type`, `condition_value`) VALUES
+(417, 43, 'Learning and Development Intervention Title', NULL, 'text', NULL, NULL, NULL, '1', 'date', 0, 1, NULL, 'equals', NULL),
+(418, 43, 'Date/s (mm/dd/yyyy)', NULL, 'datetime', NULL, NULL, NULL, '1', 'date', 1, 1, NULL, 'equals', NULL),
+(419, 43, 'Learner\'s Name (First Name, Middle Name, Surname)', NULL, 'text', NULL, NULL, NULL, '1', 'date', 2, 1, NULL, 'equals', NULL),
+(420, 43, 'Learner\'s Position', NULL, 'text', NULL, NULL, NULL, '1', 'date', 3, 1, NULL, 'equals', NULL),
+(421, 43, 'Learner\'s Age', NULL, 'number', NULL, NULL, NULL, '1', 'date', 4, 1, NULL, 'equals', NULL),
+(422, 43, 'Email Address', NULL, 'email', NULL, NULL, NULL, '1', 'date', 5, 1, NULL, 'equals', NULL),
+(423, 43, 'Objective of the Event:', NULL, 'section', NULL, NULL, NULL, '1', 'date', 6, 0, NULL, 'equals', NULL),
+(424, 43, 'Objective of the Event: The objectives were clearly communicated', NULL, 'rating', 'satisfaction_5', NULL, NULL, '1', 'date', 7, 1, NULL, 'equals', NULL),
+(425, 43, 'Objective of the Event: The objectives of the L&D intervention were attained', NULL, 'rating', 'satisfaction_5', NULL, NULL, '1', 'date', 8, 1, NULL, 'equals', NULL),
+(426, 43, 'Topic:', NULL, 'section', NULL, NULL, NULL, '1', 'date', 9, 0, NULL, 'equals', NULL),
+(427, 43, 'Topics: The Sequence of topics is logical and faciliated easier understanding', NULL, 'rating', 'satisfaction_5', NULL, NULL, '1', 'date', 10, 1, NULL, 'equals', NULL),
+(428, 43, 'Topics: The intervention was comprehensive and provided my needed knwoledge', NULL, 'rating', 'satisfaction_5', NULL, NULL, '1', 'date', 11, 1, NULL, 'equals', NULL),
+(429, 43, 'Topics: The intervention is relevant to my job', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 12, 1, NULL, 'equals', NULL),
+(430, 43, 'Time Schedule:', NULL, 'section', NULL, NULL, NULL, '1', 'date', 13, 0, NULL, 'equals', NULL),
+(431, 43, 'Time Schedule: The time alloted for each session/section was sufficient', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 14, 1, NULL, 'equals', NULL),
+(432, 43, 'Time Schedule: The time alloted for the training was sufficient ', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 15, 1, NULL, 'equals', NULL),
+(433, 43, 'Methodology:', NULL, 'section', NULL, NULL, NULL, '1', 'date', 16, 0, NULL, 'equals', NULL),
+(434, 43, 'Methodology: The methodologies used were appropriate ', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 17, 1, NULL, 'equals', NULL),
+(435, 43, 'Learning Event Team:', NULL, 'section', NULL, NULL, NULL, '1', 'date', 18, 0, NULL, 'equals', NULL),
+(436, 43, 'Learning Event Team: The learning event team was attentive to the basic needs of learners', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 19, 1, NULL, 'equals', NULL),
+(437, 43, 'Learning Event Team: The learning event team was organized and well-prepared', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 20, 1, NULL, 'equals', NULL),
+(438, 43, 'Overall', NULL, 'section', NULL, NULL, NULL, '1', 'date', 21, 0, NULL, 'equals', NULL),
+(439, 43, 'How was your overall experience with the training?', NULL, 'rating', 'quality_5', NULL, NULL, '1', 'date', 22, 1, NULL, 'equals', NULL),
+(440, 43, 'Overall, what did you gain from this learning?', NULL, 'text', NULL, NULL, NULL, '1', 'date', 23, 1, NULL, 'equals', NULL),
+(441, 43, 'What part of the Learning Event do you think was least helpful? Why?', NULL, 'text', NULL, NULL, NULL, '1', 'date', 24, 1, NULL, 'equals', NULL),
+(442, 43, 'Your comments or suggestions about this Learning Event.', NULL, 'text', NULL, NULL, NULL, '1', 'date', 25, 1, NULL, 'equals', NULL),
+(459, 63, 'Are you part of the FAD?', NULL, 'text', NULL, NULL, NULL, NULL, NULL, 0, 1, NULL, 'equals', NULL),
+(468, 44, 'Learning and Developement Intervention Title', NULL, 'text', NULL, NULL, NULL, '1', 'date', 0, 1, NULL, 'equals', NULL),
+(469, 44, 'Date/s (mm/dd/yyyy)', NULL, 'datetime', NULL, NULL, NULL, '1', 'date', 1, 1, NULL, 'equals', NULL),
+(470, 44, 'Learner\'s Name (First Name, Middle Name, Surname)', NULL, 'text', NULL, NULL, NULL, '1', 'date', 2, 1, NULL, 'equals', NULL),
+(471, 44, 'Learner\'s Position', NULL, 'text', NULL, NULL, NULL, '1', 'date', 3, 1, NULL, 'equals', NULL),
+(472, 44, 'Learner\'s Age', NULL, 'number', NULL, 0.00, NULL, '1', 'date', 4, 1, NULL, 'equals', NULL),
+(473, 44, 'Years in the Department regarless of employement status/nature', NULL, 'number', NULL, NULL, NULL, '1', 'date', 5, 1, NULL, 'equals', NULL),
+(474, 44, 'Email Address', NULL, 'text', NULL, NULL, NULL, '1', 'date', 6, 1, NULL, 'equals', NULL),
+(475, 44, 'Content:', NULL, 'section', NULL, NULL, NULL, '1', 'date', 7, 0, NULL, 'equals', NULL),
+(476, 44, 'Content: The objectives of the event were clearly defined and communicated', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 8, 1, NULL, 'equals', NULL),
+(477, 44, 'Content: The objectives of the event were attained', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 9, 1, NULL, 'equals', NULL),
+(478, 44, 'Content: The time allotted for the training was sufficient', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 10, 1, NULL, 'equals', NULL),
+(479, 44, 'Content: The training has a good mix of theories and applications', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 11, 1, NULL, 'equals', NULL),
+(480, 44, 'Overall:', NULL, 'section', NULL, NULL, NULL, '1', 'date', 12, 0, NULL, 'equals', NULL),
+(481, 44, 'Participation and interaction was encouraged', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 13, 1, NULL, 'equals', NULL),
+(482, 44, 'The electronic media used in the discussion assisted my learning and understanding of the topic', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 14, 1, NULL, 'equals', NULL),
+(483, 44, 'Relevant examples were provided for in-depth discussion', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 15, 1, NULL, 'equals', NULL),
+(484, 44, 'The training team was attentice to the needs of the learners', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 16, 1, NULL, 'equals', NULL),
+(485, 44, 'The trainers/lecturers were effective in presenting the topics', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 17, 1, NULL, 'equals', NULL),
+(486, 44, 'Overall, this is a helpful course that should be taken by other EMB-1 personnel', NULL, 'rating', 'agree_5', NULL, NULL, '1', 'date', 18, 1, NULL, 'equals', NULL),
+(487, 44, 'Do you recommend the training provider to conduct the same or other related trainings to EMB-1? Kindly expound your answer.', NULL, 'text', NULL, NULL, NULL, '1', 'date', 19, 1, NULL, 'equals', NULL),
+(488, 44, 'Apart from this Learning Service Provider, do you know other organizations/institutions that conduct similar or related learning interventions?', NULL, 'checkbox', NULL, NULL, NULL, '1', 'date', 20, 1, NULL, 'equals', NULL),
+(489, 44, 'Do you have any recommendations/comments to improve the performance of the training provider?', NULL, 'text', NULL, NULL, NULL, '1', 'date', 21, 1, NULL, 'equals', NULL),
+(490, 44, 'Overall, how was the performance of the Learning Service Provider?', NULL, 'rating', 'quality_5', NULL, NULL, '1', 'date', 22, 1, NULL, 'equals', NULL),
+(609, 52, 'General', NULL, 'section', NULL, NULL, NULL, NULL, 'date', 0, 0, NULL, 'equals', NULL),
+(610, 52, 'Full Name (First name, Middle name, Surname)', NULL, 'text', NULL, NULL, NULL, NULL, 'date', 1, 1, NULL, 'equals', NULL),
+(611, 52, 'Department or Bureau', NULL, 'checkbox', NULL, NULL, NULL, NULL, 'date', 2, 1, NULL, 'equals', NULL),
+(612, 52, 'Division', NULL, 'checkbox', NULL, NULL, NULL, NULL, 'date', 3, 1, 611, 'equals', 'Environmental Management Bureau'),
+(613, 52, 'Unit/Section', NULL, 'checkbox', NULL, NULL, NULL, NULL, 'date', 4, 1, 612, 'equals', 'EMED'),
+(614, 52, 'Unit/Section', NULL, 'checkbox', NULL, NULL, NULL, NULL, 'date', 5, 1, 612, 'equals', 'CPD'),
+(615, 52, 'Unit/Section', NULL, 'checkbox', NULL, NULL, NULL, NULL, 'date', 6, 1, 612, 'equals', 'FAD'),
+(616, 52, 'Unit/Section', NULL, 'checkbox', NULL, NULL, NULL, NULL, 'date', 7, 1, 612, 'equals', 'ORD'),
+(617, 52, 'Position', NULL, 'text', NULL, NULL, NULL, NULL, 'date', 8, 1, NULL, 'equals', NULL),
+(618, 52, 'Address', NULL, 'text', NULL, NULL, NULL, NULL, 'date', 9, 1, NULL, 'equals', NULL),
+(619, 52, 'Contact No', NULL, 'text', NULL, NULL, NULL, NULL, 'date', 10, 1, NULL, 'equals', NULL),
+(620, 52, 'Birthdate (mm/dd/yyyy)', NULL, 'datetime', NULL, NULL, NULL, NULL, 'date', 11, 1, NULL, 'equals', NULL),
+(621, 52, 'Email', NULL, 'email', NULL, NULL, NULL, NULL, NULL, 12, 1, NULL, 'equals', NULL),
+(622, 62, 'Who owns his form?', NULL, 'text', NULL, NULL, NULL, NULL, 'date', 0, 1, NULL, 'equals', NULL),
+(623, 62, 'Do you own this form?', NULL, 'multiple_choice', NULL, NULL, NULL, NULL, 'date', 1, 1, NULL, 'equals', NULL),
+(624, 62, 'Input a number', NULL, 'number', NULL, 0.00, NULL, NULL, 'date', 2, 1, NULL, 'equals', NULL),
+(625, 62, 'Input a number', NULL, 'number', NULL, 0.00, NULL, NULL, 'date', 3, 1, NULL, 'equals', NULL);
 
 -- --------------------------------------------------------
 
@@ -211,163 +228,145 @@ CREATE TABLE `question_options` (
 --
 
 INSERT INTO `question_options` (`id`, `question_id`, `option_text`, `position`) VALUES
-(130, 57, 'DENR', 0),
-(131, 57, 'EMB', 1),
-(135, 60, 'Permanent', 0),
-(136, 60, 'Job Order', 1),
-(137, 60, 'Contract of Service', 2),
-(138, 61, 'Data Controller I', 0),
-(139, 61, ' Data Controller II', 1),
-(140, 61, ' Project Development Officer I', 2),
-(141, 61, 'Planning Officer I', 3),
-(142, 61, 'Planning Officer II', 4),
-(193, 79, 'Strongly Disagree', 0),
-(194, 79, 'Disagree', 1),
-(195, 79, 'Neutral', 2),
-(196, 79, 'Agree', 3),
-(197, 79, 'Strongly Agree', 4),
-(210, 92, 'Test 1', 0),
-(211, 92, 'Test 2', 1),
-(212, 92, 'Test 3', 2),
-(213, 93, '1', 0),
-(214, 93, '2', 1),
-(215, 93, '3', 2),
-(271, 122, 'Very Dissatisfied', 0),
-(272, 122, 'Dissatisfied', 1),
-(273, 122, 'Neutral', 2),
-(274, 122, 'Satisfied', 3),
-(275, 122, 'Very Satisfied', 4),
-(276, 123, 'Very Dissatisfied', 0),
-(277, 123, 'Dissatisfied', 1),
-(278, 123, 'Neutral', 2),
-(279, 123, 'Satisfied', 3),
-(280, 123, 'Very Satisfied', 4),
-(281, 124, 'Very Dissatisfied', 0),
-(282, 124, 'Dissatisfied', 1),
-(283, 124, 'Neutral', 2),
-(284, 124, 'Satisfied', 3),
-(285, 124, 'Very Satisfied', 4),
-(286, 125, 'Very Dissatisfied', 0),
-(287, 125, 'Dissatisfied', 1),
-(288, 125, 'Neutral', 2),
-(289, 125, 'Satisfied', 3),
-(290, 125, 'Very Satisfied', 4),
-(291, 126, 'Strongly Disagree', 0),
-(292, 126, 'Disagree', 1),
-(293, 126, 'Neutral', 2),
-(294, 126, 'Agree', 3),
-(295, 126, 'Strongly Agree', 4),
-(296, 127, 'Strongly Disagree', 0),
-(297, 127, 'Disagree', 1),
-(298, 127, 'Neutral', 2),
-(299, 127, 'Agree', 3),
-(300, 127, 'Strongly Agree', 4),
-(301, 128, 'Strongly Disagree', 0),
-(302, 128, 'Disagree', 1),
-(303, 128, 'Neutral', 2),
-(304, 128, 'Agree', 3),
-(305, 128, 'Strongly Agree', 4),
-(306, 129, 'Strongly Disagree', 0),
-(307, 129, 'Disagree', 1),
-(308, 129, 'Neutral', 2),
-(309, 129, 'Agree', 3),
-(310, 129, 'Strongly Agree', 4),
-(311, 130, 'Strongly Disagree', 0),
-(312, 130, 'Disagree', 1),
-(313, 130, 'Neutral', 2),
-(314, 130, 'Agree', 3),
-(315, 130, 'Strongly Agree', 4),
-(316, 131, 'Strongly Disagree', 0),
-(317, 131, 'Disagree', 1),
-(318, 131, 'Neutral', 2),
-(319, 131, 'Agree', 3),
-(320, 131, 'Strongly Agree', 4),
-(321, 132, 'Poor', 0),
-(322, 132, 'Fair', 1),
-(323, 132, 'Good', 2),
-(324, 132, 'Very Good', 3),
-(325, 132, 'Excellent', 4),
-(611, 251, 'Strongly Disagree', 0),
-(612, 251, 'Disagree', 1),
-(613, 251, 'Neutral', 2),
-(614, 251, 'Agree', 3),
-(615, 251, 'Strongly Agree', 4),
-(616, 252, 'Strongly Disagree', 0),
-(617, 252, 'Disagree', 1),
-(618, 252, 'Neutral', 2),
-(619, 252, 'Agree', 3),
-(620, 252, 'Strongly Agree', 4),
-(621, 253, 'Strongly Disagree', 0),
-(622, 253, 'Disagree', 1),
-(623, 253, 'Neutral', 2),
-(624, 253, 'Agree', 3),
-(625, 253, 'Strongly Agree', 4),
-(626, 254, 'Strongly Disagree', 0),
-(627, 254, 'Disagree', 1),
-(628, 254, 'Neutral', 2),
-(629, 254, 'Agree', 3),
-(630, 254, 'Strongly Agree', 4),
-(631, 255, 'Strongly Disagree', 0),
-(632, 255, 'Disagree', 1),
-(633, 255, 'Neutral', 2),
-(634, 255, 'Agree', 3),
-(635, 255, 'Strongly Agree', 4),
-(636, 256, 'Strongly Disagree', 0),
-(637, 256, 'Disagree', 1),
-(638, 256, 'Neutral', 2),
-(639, 256, 'Agree', 3),
-(640, 256, 'Strongly Agree', 4),
-(641, 257, 'Strongly Disagree', 0),
-(642, 257, 'Disagree', 1),
-(643, 257, 'Neutral', 2),
-(644, 257, 'Agree', 3),
-(645, 257, 'Strongly Agree', 4),
-(646, 258, 'Strongly Disagree', 0),
-(647, 258, 'Disagree', 1),
-(648, 258, 'Neutral', 2),
-(649, 258, 'Agree', 3),
-(650, 258, 'Strongly Agree', 4),
-(651, 259, 'Strongly Disagree', 0),
-(652, 259, 'Disagree', 1),
-(653, 259, 'Neutral', 2),
-(654, 259, 'Agree', 3),
-(655, 259, 'Strongly Agree', 4),
-(656, 260, 'Strongly Disagree', 0),
-(657, 260, 'Disagree', 1),
-(658, 260, 'Neutral', 2),
-(659, 260, 'Agree', 3),
-(660, 260, 'Strongly Agree', 4),
-(661, 262, 'Yes', 0),
-(662, 262, 'No', 1),
-(663, 264, 'Poor', 0),
-(664, 264, 'Fair', 1),
-(665, 264, 'Good', 2),
-(666, 264, 'Very Good', 3),
-(667, 264, 'Excellent', 4),
-(692, 294, 'Department of Natural Resources', 0),
-(693, 294, 'Environmental Management Bureau', 1),
-(694, 295, 'EMED', 0),
-(695, 295, 'CPD', 1),
-(696, 295, 'FAD', 2),
-(697, 295, 'ORD', 3),
-(698, 296, 'AWMS', 0),
-(699, 296, 'CHWMS', 1),
-(700, 296, 'AMTSS', 2),
-(701, 296, 'ESWMS', 3),
-(702, 297, 'EIAMS', 0),
-(703, 297, 'AWPS', 1),
-(704, 297, 'CHWPS', 2),
-(705, 298, 'Accounting Unit', 0),
-(706, 298, 'Budget Unit', 1),
-(707, 298, 'Property/GSS', 2),
-(708, 298, 'Cashier Unit', 3),
-(709, 298, 'Records Unit', 4),
-(710, 298, 'HRMD Unit', 5),
-(711, 299, 'PISMU/MIS', 0),
-(712, 299, 'REL', 1),
-(713, 299, 'EEIU', 2),
-(714, 299, 'Legal Unit', 3),
-(715, 299, 'Climate Change Unit', 4);
+(922, 424, 'Very Dissatisfied', 0),
+(923, 424, 'Dissatisfied', 1),
+(924, 424, 'Neutral', 2),
+(925, 424, 'Satisfied', 3),
+(926, 424, 'Very Satisfied', 4),
+(927, 425, 'Very Dissatisfied', 0),
+(928, 425, 'Dissatisfied', 1),
+(929, 425, 'Neutral', 2),
+(930, 425, 'Satisfied', 3),
+(931, 425, 'Very Satisfied', 4),
+(932, 427, 'Very Dissatisfied', 0),
+(933, 427, 'Dissatisfied', 1),
+(934, 427, 'Neutral', 2),
+(935, 427, 'Satisfied', 3),
+(936, 427, 'Very Satisfied', 4),
+(937, 428, 'Very Dissatisfied', 0),
+(938, 428, 'Dissatisfied', 1),
+(939, 428, 'Neutral', 2),
+(940, 428, 'Satisfied', 3),
+(941, 428, 'Very Satisfied', 4),
+(942, 429, 'Strongly Disagree', 0),
+(943, 429, 'Disagree', 1),
+(944, 429, 'Neutral', 2),
+(945, 429, 'Agree', 3),
+(946, 429, 'Strongly Agree', 4),
+(947, 431, 'Strongly Disagree', 0),
+(948, 431, 'Disagree', 1),
+(949, 431, 'Neutral', 2),
+(950, 431, 'Agree', 3),
+(951, 431, 'Strongly Agree', 4),
+(952, 432, 'Strongly Disagree', 0),
+(953, 432, 'Disagree', 1),
+(954, 432, 'Neutral', 2),
+(955, 432, 'Agree', 3),
+(956, 432, 'Strongly Agree', 4),
+(957, 434, 'Strongly Disagree', 0),
+(958, 434, 'Disagree', 1),
+(959, 434, 'Neutral', 2),
+(960, 434, 'Agree', 3),
+(961, 434, 'Strongly Agree', 4),
+(962, 436, 'Strongly Disagree', 0),
+(963, 436, 'Disagree', 1),
+(964, 436, 'Neutral', 2),
+(965, 436, 'Agree', 3),
+(966, 436, 'Strongly Agree', 4),
+(967, 437, 'Strongly Disagree', 0),
+(968, 437, 'Disagree', 1),
+(969, 437, 'Neutral', 2),
+(970, 437, 'Agree', 3),
+(971, 437, 'Strongly Agree', 4),
+(972, 439, 'Poor', 0),
+(973, 439, 'Fair', 1),
+(974, 439, 'Good', 2),
+(975, 439, 'Very Good', 3),
+(976, 439, 'Excellent', 4),
+(1012, 476, 'Strongly Disagree', 0),
+(1013, 476, 'Disagree', 1),
+(1014, 476, 'Neutral', 2),
+(1015, 476, 'Agree', 3),
+(1016, 476, 'Strongly Agree', 4),
+(1017, 477, 'Strongly Disagree', 0),
+(1018, 477, 'Disagree', 1),
+(1019, 477, 'Neutral', 2),
+(1020, 477, 'Agree', 3),
+(1021, 477, 'Strongly Agree', 4),
+(1022, 478, 'Strongly Disagree', 0),
+(1023, 478, 'Disagree', 1),
+(1024, 478, 'Neutral', 2),
+(1025, 478, 'Agree', 3),
+(1026, 478, 'Strongly Agree', 4),
+(1027, 479, 'Strongly Disagree', 0),
+(1028, 479, 'Disagree', 1),
+(1029, 479, 'Neutral', 2),
+(1030, 479, 'Agree', 3),
+(1031, 479, 'Strongly Agree', 4),
+(1032, 481, 'Strongly Disagree', 0),
+(1033, 481, 'Disagree', 1),
+(1034, 481, 'Neutral', 2),
+(1035, 481, 'Agree', 3),
+(1036, 481, 'Strongly Agree', 4),
+(1037, 482, 'Strongly Disagree', 0),
+(1038, 482, 'Disagree', 1),
+(1039, 482, 'Neutral', 2),
+(1040, 482, 'Agree', 3),
+(1041, 482, 'Strongly Agree', 4),
+(1042, 483, 'Strongly Disagree', 0),
+(1043, 483, 'Disagree', 1),
+(1044, 483, 'Neutral', 2),
+(1045, 483, 'Agree', 3),
+(1046, 483, 'Strongly Agree', 4),
+(1047, 484, 'Strongly Disagree', 0),
+(1048, 484, 'Disagree', 1),
+(1049, 484, 'Neutral', 2),
+(1050, 484, 'Agree', 3),
+(1051, 484, 'Strongly Agree', 4),
+(1052, 485, 'Strongly Disagree', 0),
+(1053, 485, 'Disagree', 1),
+(1054, 485, 'Neutral', 2),
+(1055, 485, 'Agree', 3),
+(1056, 485, 'Strongly Agree', 4),
+(1057, 486, 'Strongly Disagree', 0),
+(1058, 486, 'Disagree', 1),
+(1059, 486, 'Neutral', 2),
+(1060, 486, 'Agree', 3),
+(1061, 486, 'Strongly Agree', 4),
+(1062, 488, 'Yes', 0),
+(1063, 488, 'No', 1),
+(1064, 490, 'Poor', 0),
+(1065, 490, 'Fair', 1),
+(1066, 490, 'Good', 2),
+(1067, 490, 'Very Good', 3),
+(1068, 490, 'Excellent', 4),
+(1200, 611, 'Department of Natural Resources', 0),
+(1201, 611, 'Environmental Management Bureau', 1),
+(1202, 612, 'EMED', 0),
+(1203, 612, 'CPD', 1),
+(1204, 612, 'FAD', 2),
+(1205, 612, 'ORD', 3),
+(1206, 613, 'AWMS', 0),
+(1207, 613, 'CHWMS', 1),
+(1208, 613, 'AMTSS', 2),
+(1209, 613, 'ESWMS', 3),
+(1210, 614, 'EIAMS', 0),
+(1211, 614, 'AWPS', 1),
+(1212, 614, 'CHWPS', 2),
+(1213, 615, 'Accounting Unit', 0),
+(1214, 615, 'Budget Unit', 1),
+(1215, 615, 'Property/GSS', 2),
+(1216, 615, 'Cashier Unit', 3),
+(1217, 615, 'Records Unit', 4),
+(1218, 615, 'HRMD Unit', 5),
+(1219, 616, 'PISMU/MIS', 0),
+(1220, 616, 'REL', 1),
+(1221, 616, 'EEIU', 2),
+(1222, 616, 'Legal Unit', 3),
+(1223, 616, 'Climate Change Unit', 4),
+(1224, 623, 'Yes', 0),
+(1225, 623, 'No', 1),
+(1226, 623, 'Unsure', 2);
 
 -- --------------------------------------------------------
 
@@ -386,12 +385,38 @@ CREATE TABLE `responses` (
 --
 
 INSERT INTO `responses` (`id`, `form_id`, `submitted_at`) VALUES
-(7, 21, '2026-03-12 02:10:01'),
-(8, 22, '2026-03-12 05:32:18'),
-(9, 23, '2026-03-30 00:00:07'),
-(10, 18, '2026-03-30 00:00:36'),
-(11, 18, '2026-03-30 00:00:48'),
-(12, 53, '2026-04-07 08:23:21');
+(18, 52, '2026-05-07 07:59:06'),
+(20, 44, '2026-05-11 07:06:43'),
+(21, 62, '2026-05-11 07:11:53'),
+(22, 52, '2026-05-11 07:12:48'),
+(23, 62, '2026-05-11 08:17:55'),
+(24, 62, '2026-05-12 03:23:55'),
+(26, 62, '2026-05-12 08:44:08'),
+(33, 62, '2026-05-14 00:34:11'),
+(34, 62, '2026-05-14 00:39:44');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `users`
+--
+
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL,
+  `username` varchar(100) NOT NULL,
+  `role` enum('user','super_admin') NOT NULL DEFAULT 'user',
+  `password_hash` varchar(255) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `users`
+--
+
+INSERT INTO `users` (`id`, `username`, `role`, `password_hash`, `created_at`) VALUES
+(1, 'admin_ORD', 'user', '$2y$10$IvPoUIRuu1yeUkszn8Cu4eNDv2D7/anuWsIkAFoa3m0gsUGZEeZuu', '2026-04-29 01:17:52'),
+(2, 'admin_FAD', 'user', '$2y$10$Llz2RKEem6B01bpRXtfAD.xF.UQUaE.S9VfyVcvfXsJWgbOP8FFju', '2026-05-04 07:49:03'),
+(4, 'admin', 'super_admin', '$2y$10$ZXxdygcLZzm2H9dYOtYFsOAnKAy1Vgixk6jvacWEWqgIvS2D.TmiC', '2026-05-14 05:58:29');
 
 --
 -- Indexes for dumped tables
@@ -419,7 +444,8 @@ ALTER TABLE `forms`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `form_code` (`form_code`),
   ADD KEY `category_id` (`category_id`),
-  ADD KEY `idx_form_code` (`form_code`);
+  ADD KEY `idx_form_code` (`form_code`),
+  ADD KEY `fk_forms_created_by` (`created_by`);
 
 --
 -- Indexes for table `questions`
@@ -444,6 +470,13 @@ ALTER TABLE `responses`
   ADD KEY `form_id` (`form_id`);
 
 --
+-- Indexes for table `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `username` (`username`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -451,7 +484,7 @@ ALTER TABLE `responses`
 -- AUTO_INCREMENT for table `answers`
 --
 ALTER TABLE `answers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=28;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=132;
 
 --
 -- AUTO_INCREMENT for table `categories`
@@ -463,25 +496,31 @@ ALTER TABLE `categories`
 -- AUTO_INCREMENT for table `forms`
 --
 ALTER TABLE `forms`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=54;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=76;
 
 --
 -- AUTO_INCREMENT for table `questions`
 --
 ALTER TABLE `questions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=306;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=628;
 
 --
 -- AUTO_INCREMENT for table `question_options`
 --
 ALTER TABLE `question_options`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=716;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1227;
 
 --
 -- AUTO_INCREMENT for table `responses`
 --
 ALTER TABLE `responses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
+
+--
+-- AUTO_INCREMENT for table `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- Constraints for dumped tables
@@ -498,6 +537,7 @@ ALTER TABLE `answers`
 -- Constraints for table `forms`
 --
 ALTER TABLE `forms`
+  ADD CONSTRAINT `fk_forms_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `forms_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`);
 
 --
