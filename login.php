@@ -47,7 +47,7 @@ $password = $data['password'];
 
 try {
     // Look up the user by username
-    $stmt = $pdo->prepare("SELECT id, username, password_hash FROM users WHERE username = ?");
+    $stmt = $pdo->prepare("SELECT id, username, password_hash, role FROM users WHERE username = ?");
     $stmt->execute([$username]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -68,11 +68,13 @@ try {
     // $_SESSION is like a server-side notepad tied to this browser's session cookie.
     $_SESSION['user_id'] = $user['id'];
     $_SESSION['username'] = $user['username'];
+    $_SESSION['role'] = $user['role'];
     $_SESSION['logged_in'] = true;
 
     echo json_encode([
         'success'  => true,
         'username' => $user['username'],
+        'role'     => $user['role'],
     ]);
 
 } catch (Exception $e) {

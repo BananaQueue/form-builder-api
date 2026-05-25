@@ -41,10 +41,15 @@ if (empty($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
-// We know who is asking — read their user ID from the session.
-// This is safe because the session lives on the SERVER, not in the browser.
-// The user cannot fake or modify this value.
 $currentUserId = $_SESSION['user_id'];
+$isSuperAdmin  = isset($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
+
+// Super admin can view any user's forms by passing ?user_id=X.
+// Regular users always see only their own forms.
+$targetUserId = $currentUserId;
+if ($isSuperAdmin && isset($_GET['user_id']) && is_numeric($_GET['user_id'])) {
+    $targetUserId = (int) $_GET['user_id'];
+}
 
 require_once 'db.php';
 
@@ -75,7 +80,7 @@ try {
         ORDER BY f.created_at DESC
     ");
 
-    $stmt->execute([$currentUserId]);
+    $stmt->execute([$targetUserId]);
     $forms = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode([
