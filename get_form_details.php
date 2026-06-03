@@ -1,7 +1,7 @@
 <?php
 // Enable error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // CORS headers
 $allowed_origins = [
@@ -31,6 +31,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Include database connection
 require_once 'db.php';
+require_once 'auth_helper.php';
+
+$currentUserId = fb_require_auth();
+$isSuperAdmin = !empty($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
 
 // Get form_id from URL parameter
 $form_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -88,6 +92,10 @@ try {
         ? "f.step_mode,"
         : "0 AS step_mode,";
 
+    $formCodeGroup = $formCodeColumnExists ? "f.form_code," : "";
+    $privacyNoticeGroup = $privacyNoticeColumnExists ? "f.privacy_notice," : "";
+    $stepModeGroup = $stepModeColumnExists ? "f.step_mode," : "";
+
     // Build the question SELECT columns list
     $questionSelectColumns = [
         "id",
@@ -117,6 +125,7 @@ try {
             f.description,
             f.category_id,
             c.name as category_name,
+            f.created_by,
             COUNT(DISTINCT CASE 
             WHEN q.question_type != 'section' THEN q.id 
             END) as question_count,
@@ -125,6 +134,17 @@ try {
         LEFT JOIN categories c ON f.category_id = c.id
         LEFT JOIN questions q ON f.id = q.form_id
         WHERE f.id = ?
+        GROUP BY
+            f.id,
+            {$formCodeGroup}
+            {$privacyNoticeGroup}
+            {$stepModeGroup}
+            f.title,
+            f.description,
+            f.category_id,
+            c.name,
+            f.created_by,
+            f.created_at
     ");
     $stmt->execute([$form_id]);
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -135,12 +155,22 @@ try {
         exit();
     }
 
+    $formOwnerId = (int) ($form['created_by'] ?? 0);
+    if (!$isSuperAdmin && $formOwnerId !== $currentUserId) {
+        http_response_code(403);
+        echo json_encode(['error' => 'You can only view your own forms']);
+        exit();
+    }
+    unset($form['created_by']);
+
     // ── Fetch questions for this form ──────────────────────────────────────
+    $activeFilter = isset($questionColumns['is_active']) ? ' AND is_active = 1' : '';
+
     $stmt = $pdo->prepare("
         SELECT
             {$questionSelectSql}
         FROM questions
-        WHERE form_id = ?
+        WHERE form_id = ?{$activeFilter}
         ORDER BY position ASC
     ");
     $stmt->execute([$form_id]);
@@ -171,8 +201,8 @@ try {
 
 } catch (Exception $e) {
     http_response_code(500);
+    error_log($e->getMessage());
     echo json_encode([
-        'error'   => 'Failed to retrieve form details',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to retrieve form details'
     ]);
 }

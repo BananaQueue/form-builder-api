@@ -1,7 +1,7 @@
 <?php
 // Enable error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // CORS headers
 $allowed_origins = [
@@ -30,6 +30,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Include database connection
 require_once 'db.php';
+require_once 'auth_helper.php';
+
+$currentUserId = fb_require_auth();
+$isSuperAdmin = !empty($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
 
 // Get form_id from URL parameter
 $form_id = isset($_GET['form_id']) ? intval($_GET['form_id']) : 0;
@@ -42,13 +46,20 @@ if (!$form_id) {
 
 try {
     // Get form details
-    $stmt = $pdo->prepare("SELECT id, title FROM forms WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, title, created_by FROM forms WHERE id = ?");
     $stmt->execute([$form_id]);
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$form) {
         http_response_code(404);
         echo json_encode(['error' => 'Form not found']);
+        exit();
+    }
+
+    $formOwnerId = (int) ($form['created_by'] ?? 0);
+    if (!$isSuperAdmin && $formOwnerId !== $currentUserId) {
+        http_response_code(403);
+        echo json_encode(['error' => 'You can only export responses for your own forms']);
         exit();
     }
     
@@ -62,12 +73,13 @@ try {
     $stmt->execute([$form_id]);
     $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get all responses
+    // Only export responses that have saved answers
     $stmt = $pdo->prepare("
-        SELECT id, submitted_at
-        FROM responses
-        WHERE form_id = ?
-        ORDER BY submitted_at DESC
+        SELECT DISTINCT r.id, r.submitted_at
+        FROM responses r
+        INNER JOIN answers a ON a.response_id = r.id
+        WHERE r.form_id = ?
+        ORDER BY r.submitted_at DESC
     ");
     $stmt->execute([$form_id]);
     $responses = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -111,9 +123,9 @@ try {
     
 } catch (Exception $e) {
     http_response_code(500);
+    error_log($e->getMessage());
     echo json_encode([
-        'error' => 'Failed to export responses',
-        'message' => $e->getMessage()
+        'error' => 'Failed to export responses'
     ]);
 }
 ?>

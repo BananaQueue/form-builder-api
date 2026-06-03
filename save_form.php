@@ -1,8 +1,7 @@
 <?php
-session_start();
 // Error reporting: log errors, but don't output warnings/notices as HTML (breaks JSON responses)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 
 // Allow requests from React app (CORS)
@@ -41,6 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once 'db.php';
 require_once 'question_map_helpers.php';
 require_once 'generate_form_code.php';
+require_once 'auth_helper.php';
+
+$currentUserId = fb_require_auth();
 
 // Get JSON data from request
 $json = file_get_contents('php://input');
@@ -100,7 +102,7 @@ try {
     // the browser cannot tamper with it.
     if (isset($formColumns['created_by'])) {
         $formInsertColumns[] = 'created_by';
-        $formInsertValues[] = $_SESSION['user_id'] ?? null;
+        $formInsertValues[] = $currentUserId;
     }
 
     // NEW: Include privacy_notice if that column exists (added in migration 003).
@@ -256,11 +258,13 @@ try {
     ]);
 } catch (Exception $e) {
     // Something went wrong — roll back so we don't leave partial data
-    $pdo->rollBack();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
 
     http_response_code(500);
+    error_log($e->getMessage());
     echo json_encode([
-        'error'   => 'Failed to save form',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to save form'
     ]);
 }

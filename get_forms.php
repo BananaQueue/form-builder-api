@@ -52,6 +52,7 @@ if ($isSuperAdmin && isset($_GET['user_id']) && is_numeric($_GET['user_id'])) {
 }
 
 require_once 'db.php';
+require_once 'response_helpers.php';
 
 try {
     // ── The key change: WHERE f.created_by = ? ──────────────────────────────
@@ -70,11 +71,12 @@ try {
             COUNT(DISTINCT CASE 
                 WHEN q.question_type != 'section' THEN q.id 
                 END) as question_count,
-            COUNT(DISTINCT r.id) as response_count
+            " . fb_response_count_expr('r') . " as response_count
         FROM forms f
         LEFT JOIN categories c ON f.category_id = c.id
         LEFT JOIN questions q ON f.id = q.form_id
         LEFT JOIN responses r ON f.id = r.form_id
+        LEFT JOIN answers a ON a.response_id = r.id
         WHERE f.created_by = ?
         GROUP BY f.id, c.name
         ORDER BY f.created_at DESC

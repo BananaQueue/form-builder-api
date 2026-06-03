@@ -155,11 +155,13 @@ try {
     }
 
     // ── Fetch questions ────────────────────────────────────────────────────
+    $activeFilter = isset($questionColumns['is_active']) ? ' AND is_active = 1' : '';
+
     $stmt = $pdo->prepare("
         SELECT
             {$questionSelectSql}
         FROM questions
-        WHERE form_id = ?
+        WHERE form_id = ?{$activeFilter}
         ORDER BY position ASC
     ");
     $stmt->execute([$form['id']]);

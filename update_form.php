@@ -1,7 +1,7 @@
 <?php
 // Enable error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // CORS headers
 $allowed_origins = [
@@ -32,7 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // Include database connection
 require_once 'db.php';
 require_once 'question_map_helpers.php';
+require_once 'auth_helper.php';
+require_once 'notification_helpers.php';
 
+$currentUserId = fb_require_auth();
+$isSuperAdmin = fb_is_super_admin_session();
+$adminUsername = $_SESSION['username'] ?? null;
 // Get JSON data
 $json = file_get_contents('php://input');
 $data = json_decode($json, true);
@@ -65,6 +70,25 @@ $stepMode = $data['step_mode'] ?? 0;
 try {
     // Start transaction
     $pdo->beginTransaction();
+
+    $ownerStmt = $pdo->prepare("SELECT id, title, created_by FROM forms WHERE id = ? FOR UPDATE");
+    $ownerStmt->execute([$formId]);
+    $formOwnerRow = $ownerStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$formOwnerRow) {
+        $pdo->rollBack();
+        http_response_code(404);
+        echo json_encode(['error' => 'Form not found']);
+        exit();
+    }
+
+    $formOwnerId = (int) ($formOwnerRow['created_by'] ?? 0);
+    if (!$isSuperAdmin && $formOwnerId !== $currentUserId) {
+        $pdo->rollBack();
+        http_response_code(403);
+        echo json_encode(['error' => 'You can only edit your own forms']);
+        exit();
+    }
 
     // Check which columns exist in the questions table
     $stmt = $pdo->query("SHOW COLUMNS FROM questions");
@@ -111,16 +135,15 @@ try {
     );
     $stmt->execute($updateValues);
 
-    // ── Rebuild questions ──────────────────────────────────────────────────
-    // The simplest and most reliable way to update questions is to:
-    // 1. Delete all existing questions for this form
-    // 2. Re-insert them fresh from what React sent
-    // CASCADE on the foreign key handles deleting options automatically.
+    // ── Update questions in place ───────────────────────────────────────────
+    // Do NOT delete all questions — that CASCADE-deletes historical answers.
+    // Update existing rows, insert new ones, and only remove questions with
+    // no submitted answers (soft-delete when is_active column exists).
 
-    $stmt = $pdo->prepare("DELETE FROM questions WHERE form_id = ?");
+    $stmt = $pdo->prepare("SELECT id FROM questions WHERE form_id = ?");
     $stmt->execute([$formId]);
+    $existingQuestionIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 
-    // Build the question INSERT statement dynamically
     $questionInsertColumns = [
         'form_id',
         'question_text',
@@ -133,6 +156,7 @@ try {
     ];
 
     $optionalQuestionColumns = [
+        'description'           => fn($question) => $question['description'] ?? null,
         'rating_scale'          => fn($question) => $question['rating_scale'] ?? null,
         'number_min'            => fn($question) => $question['number_min'] ?? null,
         'number_max'            => fn($question) => $question['number_max'] ?? null,
@@ -140,9 +164,10 @@ try {
         'datetime_type'         => fn($question) => $question['datetime_type'] ?? null,
         'position'              => fn($question, $index) => $question['position'] ?? $index,
         'is_required'           => fn($question) => $question['is_required'] ?? 1,
-        'condition_question_id' => fn($question) => null, // Filled in second pass
+        'is_active'             => fn($question) => 1,
+        'condition_question_id' => fn($question) => null,
         'condition_type'        => fn($question) => $question['condition_type'] ?? 'equals',
-        'condition_value'       => fn($question) => null, // Filled in second pass
+        'condition_value'       => fn($question) => null,
     ];
 
     foreach ($optionalQuestionColumns as $columnName => $resolver) {
@@ -158,30 +183,82 @@ try {
         implode(', ', array_fill(0, count($questionInsertColumns), '?'))
     );
 
-    $canUpdateConditions = isset($questionColumns['condition_question_id']);
+    $updateSetClauses = [];
+    foreach ($questionInsertColumns as $columnName) {
+        if ($columnName === 'form_id') {
+            continue;
+        }
+        $updateSetClauses[] = "{$columnName} = ?";
+    }
 
-    // First pass: insert questions, build the client-ID → DB-ID map
+    $questionUpdateSql = sprintf(
+        'UPDATE questions SET %s WHERE id = ? AND form_id = ?',
+        implode(', ', $updateSetClauses)
+    );
+
+    $canUpdateConditions = isset($questionColumns['condition_question_id']);
+    $hasIsActiveColumn = isset($questionColumns['is_active']);
+
     $questionIdMap = [];
-    $questionStmt  = $pdo->prepare($questionInsertSql);
-    $optionStmt    = $pdo->prepare(
+    $keptQuestionIds = [];
+
+    $questionInsertStmt = $pdo->prepare($questionInsertSql);
+    $questionUpdateStmt = $pdo->prepare($questionUpdateSql);
+    $deleteOptionsStmt = $pdo->prepare("DELETE FROM question_options WHERE question_id = ?");
+    $optionStmt = $pdo->prepare(
         "INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)"
     );
 
     foreach ($questions as $index => $question) {
+        $clientQuestionId = $question['id'] ?? null;
+        $isExisting = fb_is_existing_db_question_id($clientQuestionId, $existingQuestionIds);
+
         $values = [];
         foreach ($questionValueResolvers as $resolver) {
             $values[] = $resolver($question, $index, $formId);
         }
-        $questionStmt->execute($values);
 
-        $dbQuestionId = $pdo->lastInsertId();
-        $questionIdMap[$question['id']] = $dbQuestionId;
+        if ($isExisting) {
+            $dbQuestionId = (int) $clientQuestionId;
+            $updateValues = array_slice($values, 1);
+            $updateValues[] = $dbQuestionId;
+            $updateValues[] = $formId;
+            $questionUpdateStmt->execute($updateValues);
+        } else {
+            $questionInsertStmt->execute($values);
+            $dbQuestionId = (int) $pdo->lastInsertId();
+        }
 
-        // Insert options for this question
+        $mapKey = $clientQuestionId ?? $index;
+        $questionIdMap[$mapKey] = $dbQuestionId;
+        $keptQuestionIds[] = $dbQuestionId;
+
+        $deleteOptionsStmt->execute([$dbQuestionId]);
         if (isset($question['options']) && is_array($question['options'])) {
             foreach ($question['options'] as $optIndex => $option) {
                 $optionStmt->execute([$dbQuestionId, $option, $optIndex]);
             }
+        }
+    }
+
+    $countAnswersStmt = $pdo->prepare("SELECT COUNT(*) FROM answers WHERE question_id = ?");
+    $softDeleteStmt = $hasIsActiveColumn
+        ? $pdo->prepare("UPDATE questions SET is_active = 0 WHERE id = ? AND form_id = ?")
+        : null;
+    $hardDeleteStmt = $pdo->prepare("DELETE FROM questions WHERE id = ? AND form_id = ?");
+
+    foreach ($existingQuestionIds as $existingQuestionId) {
+        if (in_array($existingQuestionId, $keptQuestionIds, true)) {
+            continue;
+        }
+
+        $countAnswersStmt->execute([$existingQuestionId]);
+        $answerCount = (int) $countAnswersStmt->fetchColumn();
+
+        if ($answerCount > 0 && $softDeleteStmt) {
+            $softDeleteStmt->execute([$existingQuestionId, $formId]);
+        } elseif ($answerCount === 0) {
+            $hardDeleteStmt->execute([$existingQuestionId, $formId]);
         }
     }
 
@@ -229,6 +306,22 @@ try {
     // Commit transaction
     $pdo->commit();
 
+    $recipientId = (int) ($formOwnerRow['created_by'] ?? 0);
+    if (
+        $isSuperAdmin
+        && $recipientId > 0
+        && $recipientId !== $currentUserId
+    ) {
+        fb_create_form_notification($pdo, [
+            'recipient_user_id' => $recipientId,
+            'type' => 'FORM_EDITED',
+            'form_id' => (int) $formId,
+            'form_title' => $title,
+            'admin_id' => $currentUserId,
+            'admin_name' => $adminUsername,
+        ]);
+    }
+
     echo json_encode([
         'success' => true,
         'message' => 'Form updated successfully',
@@ -236,12 +329,14 @@ try {
     ]);
 
 } catch (Exception $e) {
-    $pdo->rollBack();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
 
     http_response_code(500);
+    error_log($e->getMessage());
     echo json_encode([
-        'error'   => 'Failed to update form',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to update form'
     ]);
 }
 ?>

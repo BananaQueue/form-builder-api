@@ -1,6 +1,7 @@
 <?php
 require_once 'auth_helper.php';
 require_once 'db.php';
+require_once 'response_helpers.php';
 
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -132,13 +133,14 @@ try {
             u.username     AS owner_username,
             u.role         AS owner_role,
             COUNT(DISTINCT q.id) AS question_count,
-            COUNT(DISTINCT r.id) AS response_count
+            " . fb_response_count_expr('r') . " AS response_count
         FROM forms f
         LEFT JOIN users      u ON f.created_by  = u.id
         LEFT JOIN categories c ON f.category_id = c.id
         LEFT JOIN questions  q ON f.id          = q.form_id
                                AND q.question_type != 'section'
         LEFT JOIN responses  r ON f.id          = r.form_id
+        LEFT JOIN answers    a ON a.response_id = r.id
         {$where_sql}
         GROUP BY
             f.id, f.form_code, f.title, f.description,
@@ -164,7 +166,7 @@ try {
         SELECT
             (SELECT COUNT(*) FROM forms)     AS total_forms,
             (SELECT COUNT(*) FROM users)     AS total_users,
-            (SELECT COUNT(*) FROM responses) AS total_responses
+            (SELECT COUNT(DISTINCT response_id) FROM answers) AS total_responses
     ");
     $metrics = $metrics_stmt->fetch(PDO::FETCH_ASSOC);
 

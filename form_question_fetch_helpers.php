@@ -35,13 +35,15 @@ function fb_build_question_select_sql(array $questionColumns): string
     return implode(",\n            ", $questionSelectColumns);
 }
 
-function fb_fetch_questions_with_options(PDO $pdo, int $formId, string $questionSelectSql): array
+function fb_fetch_questions_with_options(PDO $pdo, int $formId, string $questionSelectSql, array $questionColumns = []): array
 {
+    $activeFilter = isset($questionColumns['is_active']) ? ' AND is_active = 1' : '';
+
     $questionStmt = $pdo->prepare("
         SELECT
             {$questionSelectSql}
         FROM questions
-        WHERE form_id = ?
+        WHERE form_id = ?{$activeFilter}
         ORDER BY position ASC
     ");
     $questionStmt->execute([$formId]);

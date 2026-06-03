@@ -4,6 +4,20 @@
  * JSON may encode ids as int, string digits, or temp strings ("q_…"); PHP array
  * keys are normalized for numeric ids, but this covers edge cases.
  */
+function fb_is_existing_db_question_id($clientId, array $existingQuestionIds): bool
+{
+    if ($clientId === null || $clientId === '' || !is_numeric($clientId)) {
+        return false;
+    }
+    $id = (int) $clientId;
+    foreach ($existingQuestionIds as $existingId) {
+        if ((int) $existingId === $id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function fb_question_map_get(array $map, $clientId): ?int
 {
     if ($clientId === null || $clientId === '' || $clientId === false) {

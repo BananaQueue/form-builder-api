@@ -1,9 +1,11 @@
 <?php
-// Enable error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// CORS headers
+require_once 'db.php';
+require_once 'auth_helper.php';
+require_once 'notification_helpers.php';
+
 $allowed_origins = [
     'http://localhost:5173',
     'http://localhost:5174',
@@ -12,9 +14,9 @@ $allowed_origins = [
     'http://127.0.0.1:5173',
 ];
 
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-if (in_array($origin, $allowed_origins)) {
+if (in_array($origin, $allowed_origins, true)) {
     header('Access-Control-Allow-Origin: ' . $origin);
     header('Access-Control-Allow-Credentials: true');
 }
@@ -23,55 +25,86 @@ header('Access-Control-Allow-Methods: POST, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Content-Type: application/json');
 
-// Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-// Include database connection
-require_once 'db.php';
+$currentUserId = fb_require_auth();
+$isSuperAdmin = fb_is_super_admin_session();
+$adminUsername = $_SESSION['username'] ?? null;
 
-// Get JSON data
-$json = file_get_contents('php://input');
-$data = json_decode($json, true);
+$data = json_decode(file_get_contents('php://input'), true);
 
-// Validate data
 if (!$data || !isset($data['form_id'])) {
     http_response_code(400);
     echo json_encode(['error' => 'Form ID is required']);
     exit();
 }
 
-$formId = $data['form_id'];
+$formId = (int) $data['form_id'];
+$deletionReason = trim((string) ($data['deletion_reason'] ?? ''));
 
 try {
-    // Check if form exists
-    $stmt = $pdo->prepare("SELECT id FROM forms WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, title, created_by FROM forms WHERE id = ?");
     $stmt->execute([$formId]);
-    $form = $stmt->fetch();
-    
+    $form = $stmt->fetch(PDO::FETCH_ASSOC);
+
     if (!$form) {
         http_response_code(404);
         echo json_encode(['error' => 'Form not found']);
         exit();
     }
-    
-    // Delete form (CASCADE will automatically delete questions, options, responses, answers)
-    $stmt = $pdo->prepare("DELETE FROM forms WHERE id = ?");
-    $stmt->execute([$formId]);
-    
-    // Return success
+
+    $formOwnerId = (int) ($form['created_by'] ?? 0);
+    $isOtherUsersForm = $formOwnerId > 0 && $formOwnerId !== $currentUserId;
+
+    if (!$isSuperAdmin && $isOtherUsersForm) {
+        http_response_code(403);
+        echo json_encode(['error' => 'You can only delete your own forms']);
+        exit();
+    }
+
+    if ($isSuperAdmin && $deletionReason === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'Deletion reason is required']);
+        exit();
+    }
+
+    $pdo->beginTransaction();
+
+    $deleteStmt = $pdo->prepare("DELETE FROM forms WHERE id = ?");
+    $deleteStmt->execute([$formId]);
+
+    if (
+        $isSuperAdmin
+        && $isOtherUsersForm
+    ) {
+        fb_create_form_notification($pdo, [
+            'recipient_user_id' => $formOwnerId,
+            'type' => 'FORM_DELETED',
+            'form_id' => $formId,
+            'form_title' => $form['title'],
+            'deletion_reason' => $deletionReason,
+            'admin_id' => $currentUserId,
+            'admin_name' => $adminUsername,
+        ]);
+    }
+
+    $pdo->commit();
+
     echo json_encode([
         'success' => true,
-        'message' => 'Form deleted successfully'
+        'message' => 'Form deleted successfully',
     ]);
-    
 } catch (Exception $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     http_response_code(500);
     echo json_encode([
         'error' => 'Failed to delete form',
-        'message' => $e->getMessage()
+        'message' => $e->getMessage(),
     ]);
 }
-?>
