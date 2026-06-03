@@ -1,7 +1,14 @@
 <?php
 // Enable error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
+
+// ── Authentication ─────────────────────────────────────────────────────────
+// CSV export contains every answer to every question in a form — this is
+// the most sensitive read operation in the entire application. It must
+// be behind authentication.
+require_once 'auth_helper.php';
+fb_require_auth();
 
 // CORS headers
 $allowed_origins = [
@@ -30,39 +37,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Include database connection
 require_once 'db.php';
-require_once 'auth_helper.php';
-
-$currentUserId = fb_require_auth();
-$isSuperAdmin = !empty($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
 
 // Get form_id from URL parameter
 $form_id = isset($_GET['form_id']) ? intval($_GET['form_id']) : 0;
 
 if (!$form_id) {
     http_response_code(400);
+    // Note: we send JSON here even though the normal response is CSV,
+    // because an error before we set Content-Type to CSV should still
+    // be machine-readable.
+    header('Content-Type: application/json');
     echo json_encode(['error' => 'Form ID is required']);
     exit();
 }
 
+$currentUserId = (int) $_SESSION['user_id'];
+$isSuperAdmin  = isset($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
+
 try {
-    // Get form details
+    // Verify the form exists and check ownership
     $stmt = $pdo->prepare("SELECT id, title, created_by FROM forms WHERE id = ?");
     $stmt->execute([$form_id]);
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
-    
+
     if (!$form) {
         http_response_code(404);
+        header('Content-Type: application/json');
         echo json_encode(['error' => 'Form not found']);
         exit();
     }
 
-    $formOwnerId = (int) ($form['created_by'] ?? 0);
-    if (!$isSuperAdmin && $formOwnerId !== $currentUserId) {
+    if (!$isSuperAdmin && (int) $form['created_by'] !== $currentUserId) {
         http_response_code(403);
-        echo json_encode(['error' => 'You can only export responses for your own forms']);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'You do not have permission to export responses for this form']);
         exit();
     }
-    
+
     // Get all questions for this form (to build CSV headers)
     $stmt = $pdo->prepare("
         SELECT id, question_text, position
@@ -72,36 +83,38 @@ try {
     ");
     $stmt->execute([$form_id]);
     $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Only export responses that have saved answers
+
+    // Get all responses
     $stmt = $pdo->prepare("
-        SELECT DISTINCT r.id, r.submitted_at
-        FROM responses r
-        INNER JOIN answers a ON a.response_id = r.id
-        WHERE r.form_id = ?
-        ORDER BY r.submitted_at DESC
+        SELECT id, submitted_at
+        FROM responses
+        WHERE form_id = ?
+        ORDER BY submitted_at DESC
     ");
     $stmt->execute([$form_id]);
     $responses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Set headers for CSV download
+
+    // Set headers for CSV download.
+    // Content-Disposition: attachment tells the browser to download the file
+    // rather than try to display it. The filename is built from the form title
+    // and today's date so exported files are easy to identify later.
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $form['title'] . '_responses_' . date('Y-m-d') . '.csv"');
-    
+
     // Create output stream
     $output = fopen('php://output', 'w');
-    
+
     // Write CSV header row
     $headers = ['Submitted At'];
     foreach ($questions as $question) {
         $headers[] = $question['question_text'];
     }
     fputcsv($output, $headers);
-    
+
     // Write data rows
     foreach ($responses as $response) {
         $row = [$response['submitted_at']];
-        
+
         // Get answers for this response
         foreach ($questions as $question) {
             $stmt = $pdo->prepare("
@@ -111,21 +124,22 @@ try {
             ");
             $stmt->execute([$response['id'], $question['id']]);
             $answer = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             $row[] = $answer ? $answer['answer_text'] : '';
         }
-        
+
         fputcsv($output, $row);
     }
-    
+
     fclose($output);
     exit();
-    
+
 } catch (Exception $e) {
     http_response_code(500);
-    error_log($e->getMessage());
+    header('Content-Type: application/json');
     echo json_encode([
-        'error' => 'Failed to export responses'
+        'error'   => 'Failed to export responses',
+        'message' => $e->getMessage()
     ]);
 }
 ?>
