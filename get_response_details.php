@@ -1,12 +1,13 @@
 <?php
 // Enable error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // ── Authentication ─────────────────────────────────────────────────────────
 // Require a valid login session before returning any individual response data.
 // See get_responses.php for a full explanation of why this matters.
 require_once 'auth_helper.php';
+fb_send_security_headers();
 fb_require_auth();
 
 // CORS headers
@@ -114,10 +115,10 @@ try {
     ]);
 
 } catch (Exception $e) {
+    error_log($e->getMessage());
     http_response_code(500);
     echo json_encode([
-        'error'   => 'Failed to retrieve response details',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to retrieve response details'
     ]);
 }
 ?>

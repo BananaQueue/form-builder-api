@@ -1,7 +1,7 @@
 <?php
 // Enable error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // ── Authentication ─────────────────────────────────────────────────────────
 // We require a valid login session before returning any response data.
@@ -15,6 +15,7 @@ ini_set('display_errors', 1);
 // (names, emails, answers). Only administrators should be able to read them.
 // Without this check, anyone who knew the URL could read all submissions.
 require_once 'auth_helper.php';
+fb_send_security_headers();
 fb_require_auth();
 
 // CORS headers
@@ -124,10 +125,10 @@ try {
     ]);
 
 } catch (Exception $e) {
+    error_log($e->getMessage());
     http_response_code(500);
     echo json_encode([
-        'error'   => 'Failed to retrieve responses',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to retrieve responses'
     ]);
 }
 ?>

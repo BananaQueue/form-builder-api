@@ -1,6 +1,6 @@
 <?php
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // CORS headers
 $allowed_origins = [
@@ -28,6 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once 'db.php';
+require_once 'auth_helper.php';
+
+fb_send_security_headers();
 
 // Get form_code from URL parameter
 $form_code = isset($_GET['code']) ? trim($_GET['code']) : '';
@@ -191,10 +194,10 @@ try {
     ]);
 
 } catch (Exception $e) {
+    error_log($e->getMessage());
     http_response_code(500);
     echo json_encode([
-        'error'   => 'Failed to retrieve form',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to retrieve form'
     ]);
 }
 ?>

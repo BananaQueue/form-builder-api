@@ -1,13 +1,15 @@
 <?php
 // Enable error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // ── Authentication ─────────────────────────────────────────────────────────
 // CSV export contains every answer to every question in a form — this is
 // the most sensitive read operation in the entire application. It must
 // be behind authentication.
 require_once 'auth_helper.php';
+require_once 'audit_helpers.php';
+fb_send_security_headers();
 fb_require_auth();
 
 // CORS headers
@@ -74,6 +76,15 @@ try {
         exit();
     }
 
+    fb_audit_log($pdo, 'RESPONSES_EXPORTED', [
+        'entity_type' => 'form',
+        'entity_id' => (int) $form['id'],
+        'entity_label' => $form['title'],
+        'metadata' => [
+            'owner_user_id' => isset($form['created_by']) ? (int) $form['created_by'] : null,
+        ],
+    ]);
+
     // Get all questions for this form (to build CSV headers)
     $stmt = $pdo->prepare("
         SELECT id, question_text, position
@@ -94,12 +105,35 @@ try {
     $stmt->execute([$form_id]);
     $responses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    $answersByResponseAndQuestion = [];
+    if (count($responses) > 0 && count($questions) > 0) {
+        $responseIds = array_column($responses, 'id');
+        $questionIds = array_column($questions, 'id');
+        $responsePlaceholders = implode(',', array_fill(0, count($responseIds), '?'));
+        $questionPlaceholders = implode(',', array_fill(0, count($questionIds), '?'));
+
+        $answerStmt = $pdo->prepare("
+            SELECT response_id, question_id, answer_text
+            FROM answers
+            WHERE response_id IN ({$responsePlaceholders})
+              AND question_id IN ({$questionPlaceholders})
+        ");
+        $answerStmt->execute(array_merge($responseIds, $questionIds));
+
+        foreach ($answerStmt->fetchAll(PDO::FETCH_ASSOC) as $answerRow) {
+            $answersByResponseAndQuestion[(int) $answerRow['response_id']][(int) $answerRow['question_id']] =
+                $answerRow['answer_text'];
+        }
+    }
+
     // Set headers for CSV download.
     // Content-Disposition: attachment tells the browser to download the file
     // rather than try to display it. The filename is built from the form title
     // and today's date so exported files are easy to identify later.
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $form['title'] . '_responses_' . date('Y-m-d') . '.csv"');
+    $safeTitle = preg_replace('/[^A-Za-z0-9_-]+/', '_', $form['title']);
+    $safeTitle = trim($safeTitle, '_') ?: 'form';
+    header('Content-Disposition: attachment; filename="' . $safeTitle . '_responses_' . date('Y-m-d') . '.csv"');
 
     // Create output stream
     $output = fopen('php://output', 'w');
@@ -115,17 +149,8 @@ try {
     foreach ($responses as $response) {
         $row = [$response['submitted_at']];
 
-        // Get answers for this response
         foreach ($questions as $question) {
-            $stmt = $pdo->prepare("
-                SELECT answer_text
-                FROM answers
-                WHERE response_id = ? AND question_id = ?
-            ");
-            $stmt->execute([$response['id'], $question['id']]);
-            $answer = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $row[] = $answer ? $answer['answer_text'] : '';
+            $row[] = $answersByResponseAndQuestion[(int) $response['id']][(int) $question['id']] ?? '';
         }
 
         fputcsv($output, $row);
@@ -135,11 +160,11 @@ try {
     exit();
 
 } catch (Exception $e) {
+    error_log($e->getMessage());
     http_response_code(500);
     header('Content-Type: application/json');
     echo json_encode([
-        'error'   => 'Failed to export responses',
-        'message' => $e->getMessage()
+        'error'   => 'Failed to export responses'
     ]);
 }
 ?>

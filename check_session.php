@@ -1,5 +1,7 @@
 <?php
-session_start();
+require_once 'auth_helper.php';
+fb_send_security_headers();
+fb_start_session();
 
 $allowed_origins = [
     'http://localhost:5173',
@@ -16,7 +18,7 @@ if (in_array($origin, $allowed_origins)) {
 }
 
 header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -31,6 +33,7 @@ if (!empty($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
         'username'  => $_SESSION['username'],
         'user_id'   => $_SESSION['user_id'],
         'role'      => $_SESSION['role'] ?? 'user',
+        'csrf_token' => fb_get_csrf_token(),
     ]);
 } else {
     echo json_encode(['logged_in' => false]);

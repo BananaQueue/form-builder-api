@@ -1,6 +1,6 @@
 <?php
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // ── Session must start before we can read who is logged in ──────────────────
 // session_start() tells PHP "look up the session cookie the browser sent
@@ -91,10 +91,10 @@ try {
     ]);
 
 } catch (Exception $e) {
+    error_log($e->getMessage());
     http_response_code(500);
     echo json_encode([
         'error'   => 'Failed to retrieve forms',
-        'message' => $e->getMessage(),
     ]);
 }
 ?>

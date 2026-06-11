@@ -3,7 +3,7 @@ require_once 'auth_helper.php';
 require_once 'db.php';
 require_once 'response_helpers.php';
 
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
@@ -191,7 +191,6 @@ try {
     http_response_code(500);
     echo json_encode([
         'error'   => 'Failed to retrieve forms',
-        'message' => $e->getMessage(),
     ]);
 
     error_log($e->getMessage());

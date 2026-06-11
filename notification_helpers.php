@@ -29,13 +29,15 @@ function fb_notification_cors_headers(): void
     }
 
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type');
+    header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
     header('Content-Type: application/json');
 }
 
-function fb_is_super_admin_session(): bool
-{
-    return !empty($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
+if (!function_exists('fb_is_super_admin_session')) {
+    function fb_is_super_admin_session(): bool
+    {
+        return !empty($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
+    }
 }
 
 function fb_create_form_notification(PDO $pdo, array $data): bool

@@ -20,7 +20,7 @@ if (in_array($origin, $allowed_origins)) {
 }
 
 header('Access-Control-Allow-Methods: POST, PUT, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 header('Content-Type: application/json');
 
 // Handle preflight
@@ -34,8 +34,11 @@ require_once 'db.php';
 require_once 'question_map_helpers.php';
 require_once 'auth_helper.php';
 require_once 'notification_helpers.php';
+require_once 'audit_helpers.php';
 
+fb_send_security_headers();
 $currentUserId = fb_require_auth();
+fb_require_csrf();
 $isSuperAdmin = fb_is_super_admin_session();
 $adminUsername = $_SESSION['username'] ?? null;
 // Get JSON data
@@ -305,6 +308,17 @@ try {
 
     // Commit transaction
     $pdo->commit();
+
+    fb_audit_log($pdo, 'FORM_UPDATED', [
+        'entity_type' => 'form',
+        'entity_id' => (int) $formId,
+        'entity_label' => $title,
+        'metadata' => [
+            'owner_user_id' => $formOwnerId,
+            'question_count' => is_array($questions) ? count($questions) : 0,
+            'super_admin_action' => $isSuperAdmin,
+        ],
+    ]);
 
     $recipientId = (int) ($formOwnerRow['created_by'] ?? 0);
     if (

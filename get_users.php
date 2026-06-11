@@ -2,6 +2,8 @@
 require_once 'auth_helper.php';
 require_once 'db.php';
 
+fb_send_security_headers();
+
 $allowed_origins = [
     'http://localhost:5173',
     'http://localhost:5174',
@@ -46,7 +48,8 @@ try {
     echo json_encode(['success' => true, 'users' => $users]);
 
 } catch (Exception $e) {
+    error_log($e->getMessage());
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => 'Failed to retrieve users']);
 }
 ?>

@@ -3,7 +3,6 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
-
 // Allow requests from React app (CORS)
 // Define allowed origins (whitelist)
 $allowed_origins = [
@@ -27,7 +26,7 @@ if (in_array($origin, $allowed_origins)) {
 }
 
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS, PUT, DELETE');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRF-Token');
 header('Content-Type: application/json');
 
 // Handle preflight OPTIONS request
@@ -41,8 +40,11 @@ require_once 'db.php';
 require_once 'question_map_helpers.php';
 require_once 'generate_form_code.php';
 require_once 'auth_helper.php';
+require_once 'audit_helpers.php';
 
+fb_send_security_headers();
 $currentUserId = fb_require_auth();
+fb_require_csrf();
 
 // Get JSON data from request
 $json = file_get_contents('php://input');
@@ -249,6 +251,16 @@ try {
 
     // Commit — everything succeeded, write it all to the database
     $pdo->commit();
+
+    fb_audit_log($pdo, 'FORM_CREATED', [
+        'entity_type' => 'form',
+        'entity_id' => (int) $formId,
+        'entity_label' => $data['title'],
+        'metadata' => [
+            'form_code' => $formCode,
+            'question_count' => count($questions),
+        ],
+    ]);
 
     echo json_encode([
         'success'   => true,

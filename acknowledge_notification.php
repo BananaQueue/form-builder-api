@@ -1,12 +1,13 @@
 <?php
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 require_once 'db.php';
 require_once 'auth_helper.php';
 require_once 'notification_helpers.php';
 
 fb_notification_cors_headers();
+fb_send_security_headers();
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -14,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 $userId = fb_require_auth();
+fb_require_csrf();
 
 $data = json_decode(file_get_contents('php://input'), true);
 $notificationId = (int) ($data['notification_id'] ?? 0);
@@ -45,6 +47,7 @@ try {
 
     echo json_encode(['success' => true]);
 } catch (Exception $e) {
+    error_log($e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Failed to acknowledge notification', 'message' => $e->getMessage()]);
+    echo json_encode(['error' => 'Failed to acknowledge notification']);
 }

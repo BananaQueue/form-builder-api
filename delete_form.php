@@ -1,10 +1,13 @@
 <?php
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 require_once 'db.php';
 require_once 'auth_helper.php';
 require_once 'notification_helpers.php';
+require_once 'audit_helpers.php';
+
+fb_send_security_headers();
 
 $allowed_origins = [
     'http://localhost:5173',
@@ -22,7 +25,7 @@ if (in_array($origin, $allowed_origins, true)) {
 }
 
 header('Access-Control-Allow-Methods: POST, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -31,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 $currentUserId = fb_require_auth();
+fb_require_csrf();
 $isSuperAdmin = fb_is_super_admin_session();
 $adminUsername = $_SESSION['username'] ?? null;
 
@@ -76,6 +80,17 @@ try {
     $deleteStmt = $pdo->prepare("DELETE FROM forms WHERE id = ?");
     $deleteStmt->execute([$formId]);
 
+    fb_audit_log($pdo, 'FORM_DELETED', [
+        'entity_type' => 'form',
+        'entity_id' => $formId,
+        'entity_label' => $form['title'],
+        'metadata' => [
+            'owner_user_id' => $formOwnerId,
+            'deletion_reason' => $deletionReason,
+            'super_admin_action' => $isSuperAdmin,
+        ],
+    ]);
+
     if (
         $isSuperAdmin
         && $isOtherUsersForm
@@ -102,9 +117,9 @@ try {
         $pdo->rollBack();
     }
 
+    error_log($e->getMessage());
     http_response_code(500);
     echo json_encode([
         'error' => 'Failed to delete form',
-        'message' => $e->getMessage(),
     ]);
 }
