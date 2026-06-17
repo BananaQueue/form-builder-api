@@ -1,10 +1,26 @@
 <?php
 // Database configuration. Environment variables allow production deployments
 // to keep credentials out of source while preserving the current local defaults.
-$host = getenv('FB_DB_HOST') ?: 'localhost';
-$dbname = getenv('FB_DB_NAME') ?: 'form_builder';
-$username = getenv('FB_DB_USER') ?: 'root';
-$password = getenv('FB_DB_PASS') ?: '';
+$fbDbConfig = [
+    'host' => getenv('FB_DB_HOST') ?: 'localhost',
+    'dbname' => getenv('FB_DB_NAME') ?: 'form_builder',
+    'username' => getenv('FB_DB_USER') ?: 'root',
+    'password' => getenv('FB_DB_PASS') ?: '',
+    'allow_test_guard' => getenv('FB_ALLOW_TEST_GUARD') === '1',
+];
+
+$localConfigFile = __DIR__ . '/db.local.php';
+if (is_file($localConfigFile)) {
+    $localConfig = require $localConfigFile;
+    if (is_array($localConfig)) {
+        $fbDbConfig = array_merge($fbDbConfig, $localConfig);
+    }
+}
+
+$host = $fbDbConfig['host'];
+$dbname = $fbDbConfig['dbname'];
+$username = $fbDbConfig['username'];
+$password = $fbDbConfig['password'];
 
 // Create connection
 try {

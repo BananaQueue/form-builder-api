@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once 'db.php';
+require_once 'audit_helpers.php';
 
 $json = file_get_contents('php://input');
 $data = json_decode($json, true);
@@ -79,6 +80,12 @@ try {
     $_SESSION['role'] = $user['role'];
     $_SESSION['logged_in'] = true;
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+    fb_audit_log($pdo, 'USER_LOGIN', [
+        'entity_type' => 'user',
+        'entity_id' => $user['id'],
+        'entity_label' => $user['username'],
+    ]);
 
     echo json_encode([
         'success'  => true,
