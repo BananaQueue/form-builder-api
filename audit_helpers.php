@@ -18,9 +18,57 @@ function fb_audit_logs_table_exists(PDO $pdo): bool
     return $exists;
 }
 
+function fb_ensure_audit_logs_table(PDO $pdo): bool
+{
+    static $ensured = null;
+    if ($ensured !== null) {
+        return $ensured;
+    }
+
+    if (fb_audit_logs_table_exists($pdo)) {
+        $ensured = true;
+        return true;
+    }
+
+    if ($pdo->inTransaction()) {
+        error_log('Audit table is missing and cannot be created inside an active transaction');
+        $ensured = false;
+        return false;
+    }
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS audit_logs (
+              id INT(11) NOT NULL AUTO_INCREMENT,
+              actor_user_id INT(11) DEFAULT NULL,
+              actor_username VARCHAR(100) DEFAULT NULL,
+              actor_role VARCHAR(50) DEFAULT NULL,
+              action VARCHAR(80) NOT NULL,
+              entity_type VARCHAR(80) DEFAULT NULL,
+              entity_id INT(11) DEFAULT NULL,
+              entity_label VARCHAR(255) DEFAULT NULL,
+              metadata LONGTEXT DEFAULT NULL,
+              ip_address VARCHAR(45) DEFAULT NULL,
+              user_agent VARCHAR(255) DEFAULT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              KEY idx_audit_actor_created (actor_user_id, created_at),
+              KEY idx_audit_action_created (action, created_at),
+              KEY idx_audit_entity (entity_type, entity_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        ");
+        $ensured = true;
+    } catch (Throwable $e) {
+        error_log('Audit table creation failed: ' . $e->getMessage());
+        $ensured = false;
+    }
+
+    return $ensured;
+}
+
 function fb_audit_log(PDO $pdo, string $action, array $data = []): bool
 {
-    if (!fb_audit_logs_table_exists($pdo)) {
+    if (!fb_ensure_audit_logs_table($pdo)) {
         return false;
     }
 

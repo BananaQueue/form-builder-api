@@ -47,20 +47,46 @@ if ($userId === $currentUserId) {
 }
 
 try {
-    $lookup = $pdo->prepare("SELECT username, role FROM users WHERE id = ?");
+    $pdo->beginTransaction();
+
+    $lookup = $pdo->prepare("SELECT username, role FROM users WHERE id = ? FOR UPDATE");
     $lookup->execute([$userId]);
     $targetUser = $lookup->fetch(PDO::FETCH_ASSOC);
 
     if (!$targetUser) {
+        $pdo->rollBack();
         http_response_code(404);
         echo json_encode(['success' => false, 'error' => 'User not found']);
         exit();
     }
 
+    if ($targetUser['role'] === 'super_admin') {
+        $superAdminLock = $pdo->query("SELECT id FROM users WHERE role = 'super_admin' FOR UPDATE");
+        $superAdminIds = array_map('intval', $superAdminLock->fetchAll(PDO::FETCH_COLUMN));
+
+        if (count($superAdminIds) <= 1) {
+            $pdo->rollBack();
+            http_response_code(409);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Cannot delete the last Super Admin account',
+            ]);
+            exit();
+        }
+    }
+
+    $formsStmt = $pdo->prepare("SELECT COUNT(*) FROM forms WHERE created_by = ?");
+    $formsStmt->execute([$userId]);
+    $reassignedFormCount = (int) $formsStmt->fetchColumn();
+
+    $detachForms = $pdo->prepare("UPDATE forms SET created_by = NULL WHERE created_by = ?");
+    $detachForms->execute([$userId]);
+
     $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
     $stmt->execute([$userId]);
 
     if ($stmt->rowCount() === 0) {
+        $pdo->rollBack();
         http_response_code(404);
         echo json_encode(['success' => false, 'error' => 'User not found']);
         exit();
@@ -70,14 +96,22 @@ try {
         'entity_type' => 'user',
         'entity_id' => $userId,
         'entity_label' => $targetUser['username'],
-        'metadata' => ['role' => $targetUser['role']],
+        'metadata' => [
+            'role' => $targetUser['role'],
+            'forms_unassigned' => $reassignedFormCount,
+        ],
     ]);
 
-    // Their forms remain in the database with created_by = NULL
-    // (ON DELETE SET NULL constraint from migration 007)
+    $pdo->commit();
+
+    // Their forms remain in the database with created_by = NULL.
     echo json_encode(['success' => true]);
 
 } catch (Exception $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     error_log($e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Failed to delete user']);

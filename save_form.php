@@ -257,8 +257,7 @@ try {
         'entity_id' => (int) $formId,
         'entity_label' => $data['title'],
         'metadata' => [
-            'form_code' => $formCode,
-            'question_count' => count($questions),
+            'changes' => ['New form'],
         ],
     ]);
 

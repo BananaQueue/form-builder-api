@@ -70,11 +70,186 @@ $privacyNotice = 1;
 // We use 0 rather than null because the column is NOT NULL.
 $stepMode = $data['step_mode'] ?? 0;
 
+function fb_update_audit_question_label(array $question): string
+{
+    $type = $question['question_type'] ?? ($question['type'] ?? 'question');
+    return $type === 'section' ? 'section' : 'question';
+}
+
+function fb_update_audit_question_text(array $question): string
+{
+    return trim((string) ($question['question_text'] ?? ($question['text'] ?? '')));
+}
+
+function fb_update_audit_question_type(array $question): string
+{
+    return trim((string) ($question['question_type'] ?? ($question['type'] ?? '')));
+}
+
+function fb_update_audit_question_options(array $question): array
+{
+    $options = $question['options'] ?? [];
+    if (!is_array($options)) {
+        return [];
+    }
+
+    return array_values(array_map(
+        fn($option) => trim((string) $option),
+        $options
+    ));
+}
+
+function fb_update_audit_question_numbers(array $questions): array
+{
+    $numbers = [];
+    $questionNumber = 0;
+    $sectionNumber = 0;
+
+    foreach ($questions as $question) {
+        $id = $question['id'] ?? null;
+        if ($id === null) {
+            continue;
+        }
+
+        if (fb_update_audit_question_label($question) === 'section') {
+            $sectionNumber++;
+            $numbers[(string) $id] = "Section {$sectionNumber}";
+        } else {
+            $questionNumber++;
+            $numbers[(string) $id] = "Question {$questionNumber}";
+        }
+    }
+
+    return $numbers;
+}
+
+function fb_update_audit_change_label(string $change, string $area = ''): string
+{
+    return $area === '' ? $change : "{$change} ({$area})";
+}
+
+function fb_update_audit_fetch_questions(PDO $pdo, int $formId, array $questionColumns): array
+{
+    $descriptionSelect = isset($questionColumns['description']) ? 'description' : 'NULL AS description';
+    $activeFilter = isset($questionColumns['is_active']) ? ' AND is_active = 1' : '';
+
+    $stmt = $pdo->prepare("
+        SELECT
+            id,
+            question_text,
+            question_type,
+            {$descriptionSelect},
+            position
+        FROM questions
+        WHERE form_id = ?{$activeFilter}
+        ORDER BY position ASC, id ASC
+    ");
+    $stmt->execute([$formId]);
+    $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $optionStmt = $pdo->prepare("
+        SELECT option_text
+        FROM question_options
+        WHERE question_id = ?
+        ORDER BY position ASC
+    ");
+
+    foreach ($questions as &$question) {
+        $optionStmt->execute([$question['id']]);
+        $question['options'] = $optionStmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+    unset($question);
+
+    return $questions;
+}
+
+function fb_update_audit_describe_changes(array $beforeQuestions, array $afterQuestions): array
+{
+    $beforeById = [];
+    foreach ($beforeQuestions as $question) {
+        $beforeById[(string) $question['id']] = $question;
+    }
+
+    $beforeNumbers = fb_update_audit_question_numbers($beforeQuestions);
+    $afterNumbers = fb_update_audit_question_numbers($afterQuestions);
+    $afterExistingIds = [];
+    $changes = [];
+
+    foreach ($afterQuestions as $question) {
+        $id = $question['id'] ?? null;
+        $isExisting = $id !== null && isset($beforeById[(string) $id]);
+        $label = fb_update_audit_question_label($question);
+        $text = fb_update_audit_question_text($question);
+        $area = $id !== null ? ($afterNumbers[(string) $id] ?? '') : '';
+
+        if (!$isExisting) {
+            $changes[] = fb_update_audit_change_label(
+                $label === 'section' ? 'Added section' : 'Added question',
+                $area
+            );
+            continue;
+        }
+
+        $afterExistingIds[(string) $id] = true;
+        $before = $beforeById[(string) $id];
+        $beforeLabel = fb_update_audit_question_label($before);
+        $beforeText = fb_update_audit_question_text($before);
+        $area = $afterNumbers[(string) $id] ?? ($beforeNumbers[(string) $id] ?? '');
+
+        if (fb_update_audit_question_type($before) !== fb_update_audit_question_type($question)) {
+            $changes[] = fb_update_audit_change_label("Changed {$beforeLabel} type", $area);
+        }
+
+        if ($beforeText !== $text) {
+            $changes[] = $beforeLabel === 'section'
+                ? fb_update_audit_change_label('Edited section title', $area)
+                : fb_update_audit_change_label('Edited question text', $area);
+        }
+
+        $beforeOptions = fb_update_audit_question_options($before);
+        $afterOptions = fb_update_audit_question_options($question);
+        if ($beforeOptions !== $afterOptions) {
+            $addedOptions = array_values(array_diff($afterOptions, $beforeOptions));
+            $deletedOptions = array_values(array_diff($beforeOptions, $afterOptions));
+
+            if (count($addedOptions) > 0 && count($deletedOptions) === 0) {
+                $changes[] = fb_update_audit_change_label('Added options', $area);
+            } elseif (count($deletedOptions) > 0 && count($addedOptions) === 0) {
+                $changes[] = fb_update_audit_change_label('Deleted options', $area);
+            } else {
+                $changes[] = fb_update_audit_change_label('Edited options', $area);
+            }
+        }
+    }
+
+    foreach ($beforeQuestions as $question) {
+        $id = (string) $question['id'];
+        if (isset($afterExistingIds[$id])) {
+            continue;
+        }
+
+        $label = fb_update_audit_question_label($question);
+        $area = $beforeNumbers[$id] ?? '';
+        $changes[] = fb_update_audit_change_label(
+            $label === 'section' ? 'Deleted section' : 'Deleted question',
+            $area
+        );
+    }
+
+    return array_values(array_unique($changes));
+}
+
 try {
     // Start transaction
     $pdo->beginTransaction();
 
-    $ownerStmt = $pdo->prepare("SELECT id, title, created_by FROM forms WHERE id = ? FOR UPDATE");
+    $ownerStmt = $pdo->prepare("
+        SELECT f.id, f.title, f.created_by, u.username AS owner_username
+        FROM forms f
+        LEFT JOIN users u ON u.id = f.created_by
+        WHERE f.id = ?
+        FOR UPDATE
+    ");
     $ownerStmt->execute([$formId]);
     $formOwnerRow = $ownerStmt->fetch(PDO::FETCH_ASSOC);
 
@@ -99,6 +274,7 @@ try {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
         $questionColumns[$column['Field']] = true;
     }
+    $questionsBeforeUpdate = fb_update_audit_fetch_questions($pdo, (int) $formId, $questionColumns);
 
     // Check which columns exist in the forms table.
     // We need this before building the UPDATE so we only reference
@@ -309,14 +485,16 @@ try {
     // Commit transaction
     $pdo->commit();
 
+    $auditChanges = fb_update_audit_describe_changes($questionsBeforeUpdate, $questions);
+    $ownerUsername = $formOwnerRow['owner_username'] ?? null;
+
     fb_audit_log($pdo, 'FORM_UPDATED', [
         'entity_type' => 'form',
         'entity_id' => (int) $formId,
         'entity_label' => $title,
         'metadata' => [
-            'owner_user_id' => $formOwnerId,
-            'question_count' => is_array($questions) ? count($questions) : 0,
-            'super_admin_action' => $isSuperAdmin,
+            'form_owner' => $ownerUsername ?: ('User #' . $formOwnerId),
+            'changes' => count($auditChanges) > 0 ? $auditChanges : ['Updated form details'],
         ],
     ]);
 

@@ -1,5 +1,6 @@
 <?php
 require_once 'auth_helper.php';
+require_once 'audit_helpers.php';
 require_once 'db.php';
 
 fb_send_security_headers();
@@ -35,7 +36,88 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 fb_require_super_admin();
 
+function fb_normalize_update_change_text(string $change, ?int $questionNumber = null): string
+{
+    $normalized = preg_replace('/\s+(for|from)\s+".*"$/', '', $change);
+    $normalized = preg_replace('/\s+".*"$/', '', $normalized ?? $change);
+    $normalized = trim((string) $normalized);
+
+    if (
+        $questionNumber !== null
+        && $questionNumber > 0
+        && !preg_match('/\((Question|Section)\s+\d+\)$/', $normalized)
+        && stripos($normalized, 'question') !== false
+    ) {
+        $normalized .= " (Question {$questionNumber})";
+    }
+
+    return $normalized === '' ? 'Updated form details' : $normalized;
+}
+
+function fb_normalize_audit_log_metadata(PDO $pdo, array $logs): array
+{
+    $ownerIds = [];
+    foreach ($logs as $log) {
+        $metadata = json_decode((string) ($log['metadata'] ?? ''), true);
+        if (is_array($metadata) && isset($metadata['owner_user_id'])) {
+            $ownerIds[] = (int) $metadata['owner_user_id'];
+        }
+    }
+
+    $ownerNames = [];
+    $ownerIds = array_values(array_unique(array_filter($ownerIds)));
+    if (count($ownerIds) > 0) {
+        $placeholders = implode(', ', array_fill(0, count($ownerIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, username FROM users WHERE id IN ({$placeholders})");
+        $stmt->execute($ownerIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $user) {
+            $ownerNames[(int) $user['id']] = $user['username'];
+        }
+    }
+
+    foreach ($logs as &$log) {
+        $metadata = json_decode((string) ($log['metadata'] ?? ''), true);
+        if (!is_array($metadata)) {
+            continue;
+        }
+
+        if (isset($metadata['owner_user_id']) && !isset($metadata['form_owner'])) {
+            $ownerId = (int) $metadata['owner_user_id'];
+            $metadata['form_owner'] = $ownerNames[$ownerId] ?? ('User #' . $ownerId);
+            unset($metadata['owner_user_id']);
+        }
+
+        if (isset($metadata['super_admin_action'])) {
+            unset($metadata['super_admin_action']);
+        }
+
+        if (($log['action'] ?? '') === 'FORM_UPDATED' && empty($metadata['changes'])) {
+            $metadata['changes'] = ['Updated form details'];
+        }
+
+        if (($log['action'] ?? '') === 'FORM_UPDATED') {
+            $questionNumber = isset($metadata['question_count']) ? (int) $metadata['question_count'] : null;
+            if (isset($metadata['changes']) && is_array($metadata['changes'])) {
+                $metadata['changes'] = array_values(array_map(
+                    fn($change) => fb_normalize_update_change_text((string) $change, $questionNumber),
+                    $metadata['changes']
+                ));
+            }
+            unset($metadata['question_count']);
+        }
+
+        $log['metadata'] = json_encode($metadata, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+    unset($log);
+
+    return $logs;
+}
+
 try {
+    if (!fb_ensure_audit_logs_table($pdo)) {
+        throw new RuntimeException('Audit logs table is unavailable');
+    }
+
     $page = max(1, (int) ($_GET['page'] ?? 1));
     $pageSize = min(100, max(10, (int) ($_GET['page_size'] ?? 25)));
     $offset = ($page - 1) * $pageSize;
@@ -89,6 +171,7 @@ try {
         LIMIT {$pageSize} OFFSET {$offset}
     ");
     $stmt->execute($params);
+    $logs = fb_normalize_audit_log_metadata($pdo, $stmt->fetchAll(PDO::FETCH_ASSOC));
 
     $actionsStmt = $pdo->query("
         SELECT DISTINCT action
@@ -98,7 +181,7 @@ try {
 
     echo json_encode([
         'success' => true,
-        'logs' => $stmt->fetchAll(PDO::FETCH_ASSOC),
+        'logs' => $logs,
         'actions' => $actionsStmt->fetchAll(PDO::FETCH_COLUMN),
         'pagination' => [
             'page' => $page,
