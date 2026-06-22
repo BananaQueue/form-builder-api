@@ -4,30 +4,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
 // CORS headers
-$allowed_origins = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost',
-    'http://formbuilder.local',
-    'http://127.0.0.1:5173',
-];
-
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-
-if (in_array($origin, $allowed_origins)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Credentials: true');
-}
-
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Content-Type: application/json');
-
-// Handle preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once 'cors_helper.php';
+fb_apply_cors('POST, OPTIONS', 'Content-Type', 'application/json');
+fb_exit_on_options();
 
 require_once 'db.php';
 require_once 'auth_helper.php';
@@ -161,6 +140,14 @@ if (!$data || !isset($data['form_id']) || !isset($data['answers']) || !is_array(
 $formId  = $data['form_id'];
 $answers = $data['answers'];
 
+$rateLimitKey = (int) $formId . '|' . fb_client_ip();
+$rateLimitWindow = 10 * 60;
+if (fb_is_rate_limited('public_submission', $rateLimitKey, 20, $rateLimitWindow)) {
+    http_response_code(429);
+    echo json_encode(['error' => 'Too many submissions. Please try again later.']);
+    exit();
+}
+
 try {
     // Verify the form actually exists before inserting a response row.
     // Without this check, someone could submit responses for a form_id
@@ -172,6 +159,8 @@ try {
         echo json_encode(['error' => 'Form not found']);
         exit();
     }
+
+    fb_record_rate_limit_attempt('public_submission', $rateLimitKey, $rateLimitWindow);
 
     $columnStmt = $pdo->query("SHOW COLUMNS FROM questions");
     $questionColumns = [];
@@ -314,7 +303,9 @@ try {
 
 } catch (Exception $e) {
     // Rollback on error
-    $pdo->rollBack();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
 
     http_response_code(500);
     error_log($e->getMessage());

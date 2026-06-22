@@ -7,28 +7,9 @@ ini_set('display_errors', 0);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-$allowed_origins = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost',
-    'http://formbuilder.local',
-    'http://127.0.0.1:5173',
-];
-
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-if (in_array($origin, $allowed_origins)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Credentials: true');
-}
-
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Content-Type: application/json');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once 'cors_helper.php';
+fb_apply_cors('GET, OPTIONS', 'Content-Type', 'application/json');
+fb_exit_on_options();
 
 // Only super admins can access this endpoint
 fb_require_super_admin();

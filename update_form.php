@@ -4,30 +4,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
 // CORS headers
-$allowed_origins = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost',
-    'http://formbuilder.local',
-    'http://127.0.0.1:5173',
-];
-
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-
-if (in_array($origin, $allowed_origins)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Credentials: true');
-}
-
-header('Access-Control-Allow-Methods: POST, PUT, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
-header('Content-Type: application/json');
-
-// Handle preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once 'cors_helper.php';
+fb_apply_cors('POST, PUT, OPTIONS', 'Content-Type, X-CSRF-Token', 'application/json');
+fb_exit_on_options();
 
 // Include database connection
 require_once 'db.php';

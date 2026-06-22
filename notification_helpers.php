@@ -14,23 +14,8 @@ function fb_notifications_table_exists(PDO $pdo): bool
 
 function fb_notification_cors_headers(): void
 {
-    $allowed_origins = [
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://localhost',
-        'http://formbuilder.local',
-        'http://127.0.0.1:5173',
-    ];
-
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    if (in_array($origin, $allowed_origins, true)) {
-        header('Access-Control-Allow-Origin: ' . $origin);
-        header('Access-Control-Allow-Credentials: true');
-    }
-
-    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
-    header('Content-Type: application/json');
+    require_once __DIR__ . '/cors_helper.php';
+    fb_apply_cors('GET, POST, OPTIONS', 'Content-Type, X-CSRF-Token', 'application/json');
 }
 
 if (!function_exists('fb_is_super_admin_session')) {

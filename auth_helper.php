@@ -75,6 +75,49 @@ function fb_rate_limit_dir(): string
     return $dir;
 }
 
+function fb_rate_limit_file(string $scope, string $key): string
+{
+    $safeScope = preg_replace('/[^a-z0-9_-]/i', '_', $scope) ?: 'default';
+    $hash = hash('sha256', $safeScope . '|' . $key);
+
+    return fb_rate_limit_dir() . '/' . $safeScope . '_' . $hash . '.json';
+}
+
+function fb_is_rate_limited(string $scope, string $key, int $maxAttempts, int $windowSeconds): bool
+{
+    $file = fb_rate_limit_file($scope, $key);
+    if (!is_file($file)) {
+        return false;
+    }
+
+    $state = json_decode((string) @file_get_contents($file), true);
+    if (!is_array($state)) {
+        return false;
+    }
+
+    $now = time();
+    $windowStarted = (int) ($state['window_started'] ?? 0);
+    if ($windowStarted < ($now - $windowSeconds)) {
+        return false;
+    }
+
+    return ((int) ($state['attempts'] ?? 0)) >= $maxAttempts;
+}
+
+function fb_record_rate_limit_attempt(string $scope, string $key, int $windowSeconds): void
+{
+    $file = fb_rate_limit_file($scope, $key);
+    $now = time();
+
+    $state = json_decode((string) @file_get_contents($file), true);
+    if (!is_array($state) || (int) ($state['window_started'] ?? 0) < ($now - $windowSeconds)) {
+        $state = ['window_started' => $now, 'attempts' => 0];
+    }
+
+    $state['attempts'] = ((int) ($state['attempts'] ?? 0)) + 1;
+    @file_put_contents($file, json_encode($state), LOCK_EX);
+}
+
 function fb_login_rate_limit_file(string $username): string
 {
     $key = hash('sha256', strtolower(trim($username)) . '|' . fb_client_ip());
@@ -189,5 +232,33 @@ function fb_is_super_admin_session(): bool
 {
     fb_start_session();
     return !empty($_SESSION['role']) && $_SESSION['role'] === 'super_admin';
+}
+
+function fb_min_password_length(): int
+{
+    $configured = (int) (getenv('FB_MIN_PASSWORD_LENGTH') ?: 12);
+    return max(12, $configured);
+}
+
+function fb_password_policy_error(string $password): ?string
+{
+    $minLength = fb_min_password_length();
+    if (strlen($password) < $minLength) {
+        return "Password must be at least {$minLength} characters";
+    }
+
+    if (!preg_match('/[A-Z]/', $password)) {
+        return 'Password must include at least one uppercase letter';
+    }
+
+    if (!preg_match('/[a-z]/', $password)) {
+        return 'Password must include at least one lowercase letter';
+    }
+
+    if (!preg_match('/[0-9]/', $password)) {
+        return 'Password must include at least one number';
+    }
+
+    return null;
 }
 ?>

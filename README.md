@@ -32,6 +32,10 @@ FB_DB_NAME
 FB_DB_USER
 FB_DB_PASS
 FB_ALLOW_TEST_GUARD
+FB_ALLOWED_ORIGINS
+FB_MIN_PASSWORD_LENGTH
+FB_BOOTSTRAP_ADMIN_USERNAME
+FB_BOOTSTRAP_ADMIN_PASSWORD
 ```
 
 Optional local override:
@@ -109,6 +113,17 @@ Notifications:
 - `mark_notification_read.php`
 - `acknowledge_notification.php`
 
+## Initial Super Admin Bootstrap
+
+For a clean production database, create the first Super Admin from the server CLI only:
+
+```powershell
+$env:FB_BOOTSTRAP_ADMIN_USERNAME="admin"
+$env:FB_BOOTSTRAP_ADMIN_PASSWORD="Use-A-Strong-Unique-Password-123"
+php bootstrap_super_admin.php
+```
+
+The script refuses web requests, enforces the server password policy, and aborts if any Super Admin already exists.
 ## Test Endpoints
 
 These are for E2E tests only:

@@ -5,28 +5,9 @@ require_once 'audit_helpers.php';
 
 fb_send_security_headers();
 
-$allowed_origins = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost',
-    'http://formbuilder.local',
-    'http://127.0.0.1:5173',
-];
-
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-if (in_array($origin, $allowed_origins)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Credentials: true');
-}
-
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
-header('Content-Type: application/json');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once 'cors_helper.php';
+fb_apply_cors('POST, OPTIONS', 'Content-Type, X-CSRF-Token', 'application/json');
+fb_exit_on_options();
 
 fb_require_super_admin();
 fb_require_csrf();
@@ -49,9 +30,10 @@ if (!in_array($role, ['user', 'super_admin'])) {
     exit();
 }
 
-if (strlen($password) < 6) {
+$passwordError = fb_password_policy_error($password);
+if ($passwordError) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Password must be at least 6 characters']);
+    echo json_encode(['success' => false, 'error' => $passwordError]);
     exit();
 }
 

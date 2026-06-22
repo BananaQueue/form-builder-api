@@ -4,36 +4,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
 // Allow requests from React app (CORS)
-// Define allowed origins (whitelist)
-$allowed_origins = [
-    'http://localhost:5173',           // React dev server (Vite default)
-    'http://localhost:5174',           // In case you run multiple React apps
-    'http://localhost',                // For test.html
-    'http://formbuilder.local',        // Your custom domain
-    'http://127.0.0.1:5173',          // Alternative localhost
-];
-
-// Get the origin of the incoming request
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-
-// Check if the origin is in our whitelist
-if (in_array($origin, $allowed_origins)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Credentials: true');
-} else {
-    // If not in whitelist, don't set the header (request will be blocked)
-    error_log("Blocked CORS request from: " . $origin);
-}
-
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS, PUT, DELETE');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRF-Token');
-header('Content-Type: application/json');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once 'cors_helper.php';
+fb_apply_cors('POST, GET, OPTIONS, PUT, DELETE', 'Content-Type, Authorization, X-CSRF-Token', 'application/json');
+fb_exit_on_options();
 
 // Include database connection
 require_once 'db.php';
