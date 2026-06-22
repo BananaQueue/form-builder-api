@@ -6,6 +6,7 @@ return [
     'dbname' => 'form_builder_test',
     'username' => 'root',
     'password' => '',
+    'timezone' => '+08:00',
     'allow_test_guard' => true,
     'test_reset_token' => 'local-e2e-reset',
 ];

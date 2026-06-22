@@ -6,6 +6,7 @@ $fbDbConfig = [
     'dbname' => getenv('FB_DB_NAME') ?: 'form_builder',
     'username' => getenv('FB_DB_USER') ?: 'root',
     'password' => getenv('FB_DB_PASS') ?: '',
+    'timezone' => getenv('FB_DB_TIMEZONE') ?: '+08:00',
     'allow_test_guard' => getenv('FB_ALLOW_TEST_GUARD') === '1',
 ];
 
@@ -31,6 +32,13 @@ try {
     
     // Set character set to UTF-8
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+
+    // Keep database-generated timestamps aligned with the app's local timezone.
+    $timezone = (string) ($fbDbConfig['timezone'] ?? '+08:00');
+    if (!preg_match('/^[+-](?:0\d|1[0-4]):[0-5]\d$/', $timezone)) {
+        throw new PDOException('Invalid database timezone offset');
+    }
+    $pdo->exec("SET time_zone = " . $pdo->quote($timezone));
     
     // Optional: Uncomment to test connection
     // echo "Database connected successfully";

@@ -164,10 +164,11 @@ try {
             metadata,
             ip_address,
             user_agent,
-            created_at
+            created_at,
+            UNIX_TIMESTAMP(created_at) AS created_at_unix
         FROM audit_logs
         {$whereSql}
-        ORDER BY created_at DESC, id DESC
+        ORDER BY id DESC, created_at DESC
         LIMIT {$pageSize} OFFSET {$offset}
     ");
     $stmt->execute($params);
