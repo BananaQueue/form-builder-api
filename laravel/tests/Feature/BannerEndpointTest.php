@@ -8,10 +8,30 @@ use Tests\TestCase;
 
 class BannerEndpointTest extends TestCase
 {
+    private ?string $originalBanner = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $path = public_path('uploads/banner.png');
+        $this->originalBanner = is_file($path) ? file_get_contents($path) : null;
+
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
     protected function tearDown(): void
     {
         $path = public_path('uploads/banner.png');
-        if (is_file($path)) {
+        if ($this->originalBanner !== null) {
+            $dir = dirname($path);
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            file_put_contents($path, $this->originalBanner);
+        } elseif (is_file($path)) {
             @unlink($path);
         }
 

@@ -149,6 +149,7 @@ class LegacyLookupController extends Controller
                     id,
                     question_text,
                     question_type,
+                    description,
                     rating_scale,
                     number_min,
                     number_max,
@@ -213,7 +214,7 @@ class LegacyLookupController extends Controller
             }
 
             $form = $this->rowToArray($form);
-            $questions = DB::select('SELECT id, question_text, question_type, rating_scale, number_min, number_max, number_step, datetime_type, position, is_required, condition_question_id, condition_type, condition_value FROM questions WHERE form_id = ? AND is_active = 1 ORDER BY position ASC', [$form['id']]);
+            $questions = DB::select('SELECT id, question_text, question_type, description, rating_scale, number_min, number_max, number_step, datetime_type, position, is_required, condition_question_id, condition_type, condition_value FROM questions WHERE form_id = ? AND is_active = 1 ORDER BY position ASC', [$form['id']]);
 
             $form['questions'] = array_map(function (object|array $question): array {
                 $question = $this->rowToArray($question);
@@ -334,7 +335,8 @@ class LegacyLookupController extends Controller
                     a.question_id,
                     a.answer_text,
                     q.question_text,
-                    q.question_type
+                    q.question_type,
+                    q.description
                 FROM answers a
                 JOIN questions q ON a.question_id = q.id
                 WHERE a.response_id = ?

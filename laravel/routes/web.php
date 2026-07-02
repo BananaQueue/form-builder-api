@@ -2,9 +2,14 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+$appIndex = public_path('app/index.html');
+$serveReactApp = function () use ($appIndex) {
+    return is_file($appIndex)
+        ? response()->file($appIndex)
+        : view('welcome');
+};
+
+Route::get('/', $serveReactApp);
 
 Route::get('/_fb_laravel_health', function () {
     return response()->json([
@@ -33,10 +38,39 @@ Route::get('/get_categories.php', [\App\Http\Controllers\LegacyLookupController:
 Route::get('/get_forms.php', [\App\Http\Controllers\LegacyLookupController::class, 'forms']);
 Route::get('/get_form_details.php', [\App\Http\Controllers\LegacyLookupController::class, 'formDetails']);
 Route::get('/get_form_by_code.php', [\App\Http\Controllers\LegacyLookupController::class, 'publicFormByCode']);
+Route::get('/api/categories', [\App\Http\Controllers\LegacyLookupController::class, 'categories']);
+Route::get('/api/forms', [\App\Http\Controllers\LegacyLookupController::class, 'forms']);
+Route::get('/api/forms/{id}', function (\Illuminate\Http\Request $request, int $id) {
+    $request->query->set('id', $id);
+
+    return app(\App\Http\Controllers\LegacyLookupController::class)->formDetails($request);
+})->whereNumber('id');
+Route::get('/api/public/forms/{code}', function (\Illuminate\Http\Request $request, string $code) {
+    $request->query->set('code', $code);
+
+    return app(\App\Http\Controllers\LegacyLookupController::class)->publicFormByCode($request);
+});
 Route::get('/get_responses.php', [\App\Http\Controllers\LegacyLookupController::class, 'responses']);
 Route::get('/get_response_details.php', [\App\Http\Controllers\LegacyLookupController::class, 'responseDetails']);
 Route::get('/export_responses.php', [\App\Http\Controllers\LegacyLookupController::class, 'exportResponses']);
+Route::get('/api/forms/{id}/responses', function (\Illuminate\Http\Request $request, int $id) {
+    $request->query->set('form_id', $id);
+
+    return app(\App\Http\Controllers\LegacyLookupController::class)->responses($request);
+})->whereNumber('id');
+Route::get('/api/forms/{id}/responses/export', function (\Illuminate\Http\Request $request, int $id) {
+    $request->query->set('form_id', $id);
+
+    return app(\App\Http\Controllers\LegacyLookupController::class)->exportResponses($request);
+})->whereNumber('id');
+Route::get('/api/responses/{id}', function (\Illuminate\Http\Request $request, int $id) {
+    $request->query->set('id', $id);
+
+    return app(\App\Http\Controllers\LegacyLookupController::class)->responseDetails($request);
+})->whereNumber('id');
 Route::post('/submit_response.php', [\App\Http\Controllers\LegacySubmissionController::class, 'submitResponse']);
 Route::post('/save_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'saveForm']);
 Route::post('/update_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'updateForm']);
 Route::post('/delete_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'deleteForm']);
+Route::get('/{path}', $serveReactApp)
+    ->where('path', '^(?!.*\.).*$');

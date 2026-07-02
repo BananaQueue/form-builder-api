@@ -30,7 +30,7 @@ class LegacyFormWriteController extends Controller
                 $questionIdMap = [];
 
                 foreach ($questions as $index => $question) {
-                    DB::insert('INSERT INTO questions (form_id, question_text, question_type, rating_scale, number_min, number_max, number_step, datetime_type, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [$formId, $question['question_text'] ?? ($question['text'] ?? ''), $question['question_type'] ?? ($question['type'] ?? 'text'), $question['rating_scale'] ?? null, $question['number_min'] ?? null, $question['number_max'] ?? null, $question['number_step'] ?? null, $question['datetime_type'] ?? null, $index, $question['is_required'] ?? 1, null, $question['condition_type'] ?? 'equals', null]);
+                    DB::insert('INSERT INTO questions (form_id, question_text, question_type, description, rating_scale, number_min, number_max, number_step, datetime_type, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [$formId, $question['question_text'] ?? ($question['text'] ?? ''), $question['question_type'] ?? ($question['type'] ?? 'text'), $question['description'] ?? null, $question['rating_scale'] ?? null, $question['number_min'] ?? null, $question['number_max'] ?? null, $question['number_step'] ?? null, $question['datetime_type'] ?? null, $index, $question['is_required'] ?? 1, null, $question['condition_type'] ?? 'equals', null]);
                     $dbQuestionId = (string) DB::getPdo()->lastInsertId();
                     $clientTempId = (string) ($question['id'] ?? $index);
                     $questionIdMap[$clientTempId] = $dbQuestionId;
@@ -81,10 +81,11 @@ class LegacyFormWriteController extends Controller
         $currentUserId = (int) $request->session()->get('user_id');
         $isSuperAdmin = $request->session()->get('role') === 'super_admin';
         $ownerRow = null;
+        $auditChanges = [];
 
         try {
-            DB::transaction(function () use ($data, $formId, $currentUserId, $isSuperAdmin, &$ownerRow): void {
-                $owners = DB::select('SELECT f.id, f.title, f.created_by, u.username AS owner_username FROM forms f LEFT JOIN users u ON u.id = f.created_by WHERE f.id = ? FOR UPDATE', [$formId]);
+            DB::transaction(function () use ($data, $formId, $currentUserId, $isSuperAdmin, &$ownerRow, &$auditChanges): void {
+                $owners = DB::select('SELECT f.id, f.title, f.description, f.category_id, f.step_mode, f.created_by, u.username AS owner_username FROM forms f LEFT JOIN users u ON u.id = f.created_by WHERE f.id = ? FOR UPDATE', [$formId]);
                 $ownerRow = $owners[0] ?? null;
                 if (! $ownerRow) {
                     throw new \RuntimeException('FORM_NOT_FOUND');
@@ -94,9 +95,23 @@ class LegacyFormWriteController extends Controller
                     throw new \RuntimeException('FORM_FORBIDDEN');
                 }
 
-                DB::update('UPDATE forms SET title = ?, description = ?, category_id = ?, privacy_notice = ?, step_mode = ? WHERE id = ?', [$data['title'], $data['description'] ?? "\u{00A0}", $data['category_id'] ?? 1, 1, $data['step_mode'] ?? 0, $formId]);
-                $existingIds = array_map(fn ($row) => (int) $this->rowToArray($row)['id'], DB::select('SELECT id FROM questions WHERE form_id = ?', [$formId]));
                 $questions = is_array($data['questions']) ? $data['questions'] : [];
+                $existingQuestionRows = array_map(
+                    fn ($row) => $this->rowToArray($row),
+                    DB::select('SELECT id, question_text, question_type, description, is_required FROM questions WHERE form_id = ?', [$formId])
+                );
+                foreach ($existingQuestionRows as &$existingQuestionRow) {
+                    $options = DB::select('SELECT option_text FROM question_options WHERE question_id = ? ORDER BY position ASC', [(int) $existingQuestionRow['id']]);
+                    $existingQuestionRow['options'] = array_map(fn ($option) => $this->rowToArray($option)['option_text'], $options);
+                }
+                unset($existingQuestionRow);
+                $existingIds = array_map(fn ($row) => (int) $row['id'], $existingQuestionRows);
+                $auditChanges = array_merge(
+                    $this->describeFormAuditChanges($owner, $data),
+                    $this->describeQuestionAuditChanges($existingQuestionRows, $questions)
+                );
+
+                DB::update('UPDATE forms SET title = ?, description = ?, category_id = ?, privacy_notice = ?, step_mode = ? WHERE id = ?', [$data['title'], $data['description'] ?? "\u{00A0}", $data['category_id'] ?? 1, 1, $data['step_mode'] ?? 0, $formId]);
                 $questionIdMap = [];
                 $keptIds = [];
 
@@ -145,7 +160,7 @@ class LegacyFormWriteController extends Controller
                 }
             });
 
-            $this->auditFormUpdated($request, $formId, (string) $data['title']);
+            $this->auditFormUpdated($request, $formId, (string) $data['title'], $auditChanges);
             $this->notifyOwnerIfAdminEdited($request, $ownerRow, $formId, (string) $data['title']);
             return response()->json(['success' => true, 'message' => 'Form updated successfully', 'form_id' => $formId]);
         } catch (\RuntimeException $exception) {
@@ -215,7 +230,15 @@ class LegacyFormWriteController extends Controller
     }
     private function generateFormCodeWithSlug(string $title, int $codeLength = 7): string
     {
-        return $this->generateSlugFromTitle($title).'-'.$this->generateUniqueFormCode($codeLength);
+        $uniqueCode = $this->generateUniqueFormCode($codeLength);
+        $slug = $this->generateSlugFromTitle($title);
+        $maxSlugLength = max(1, 20 - strlen($uniqueCode) - 1);
+
+        if (strlen($slug) > $maxSlugLength) {
+            $slug = trim(substr($slug, 0, $maxSlugLength), '-');
+        }
+
+        return ($slug === '' ? 'form' : $slug).'-'.$uniqueCode;
     }
 
     private function generateSlugFromTitle(string $title): string
@@ -258,9 +281,116 @@ class LegacyFormWriteController extends Controller
         return is_array($row) ? $row : get_object_vars($row);
     }
 
-    private function auditFormUpdated(Request $request, int $formId, string $title): void
+    private function describeFormAuditChanges(array $before, array $data): array
     {
-        try { DB::table('audit_logs')->insert(['actor_user_id' => $request->session()->get('user_id'), 'actor_username' => $request->session()->get('username'), 'actor_role' => $request->session()->get('role'), 'action' => 'FORM_UPDATED', 'entity_type' => 'form', 'entity_id' => $formId, 'entity_label' => $title, 'metadata' => json_encode(['changes' => ['Updated form details']]), 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now()]); } catch (Throwable $exception) {}
+        $changes = [];
+
+        if ($this->normalizeAuditText($before['title'] ?? '') !== $this->normalizeAuditText($data['title'] ?? '')) {
+            $changes[] = 'Edited form title';
+        }
+
+        if ($this->normalizeAuditText($before['description'] ?? '') !== $this->normalizeAuditText($data['description'] ?? "\u{00A0}")) {
+            $changes[] = 'Edited form description';
+        }
+
+        if ((int) ($before['category_id'] ?? 1) !== (int) ($data['category_id'] ?? 1)) {
+            $changes[] = 'Changed form category';
+        }
+
+        $beforeStepMode = (int) ($before['step_mode'] ?? 0);
+        $afterStepMode = (int) ($data['step_mode'] ?? 0);
+        if ($beforeStepMode !== $afterStepMode) {
+            $changes[] = $afterStepMode === 1 ? 'Enabled step mode' : 'Disabled step mode';
+        }
+
+        return $changes;
+    }
+
+    private function describeQuestionAuditChanges(array $beforeQuestions, array $afterQuestions): array
+    {
+        $beforeById = [];
+        foreach ($beforeQuestions as $question) {
+            $beforeById[(string) $question['id']] = $question;
+        }
+
+        $afterExistingIds = [];
+        $changes = [];
+
+        foreach ($afterQuestions as $question) {
+            $id = $question['id'] ?? null;
+            $type = $question['question_type'] ?? ($question['type'] ?? '');
+            $isSection = $type === 'section';
+            $isExisting = $id !== null && isset($beforeById[(string) $id]);
+
+            if (! $isExisting) {
+                $changes[] = $isSection ? 'Added section' : 'Added question';
+                continue;
+            }
+
+            $afterExistingIds[(string) $id] = true;
+            $before = $beforeById[(string) $id];
+            $beforeType = $before['question_type'] ?? '';
+            $beforeIsSection = $beforeType === 'section';
+            $titleChanged = $this->normalizeAuditText($before['question_text'] ?? '') !== $this->normalizeAuditText($question['question_text'] ?? ($question['text'] ?? ''));
+            $descriptionChanged = $this->normalizeAuditText($before['description'] ?? '') !== $this->normalizeAuditText($question['description'] ?? '');
+
+            if ($beforeType !== $type) {
+                $changes[] = $beforeIsSection ? 'Changed section type' : 'Changed question type';
+            }
+
+            if (! $beforeIsSection && (int) ($before['is_required'] ?? 1) !== (int) ($question['is_required'] ?? 1)) {
+                $changes[] = ((int) ($question['is_required'] ?? 1) === 1) ? 'Marked question required' : 'Marked question optional';
+            }
+
+            if ($titleChanged || ($beforeIsSection && $descriptionChanged)) {
+                $changes[] = $beforeIsSection ? 'Edited section' : 'Edited question text';
+            }
+
+            if (! $beforeIsSection) {
+                $beforeOptions = $this->normalizeQuestionOptions($before['options'] ?? []);
+                $afterOptions = $this->normalizeQuestionOptions($question['options'] ?? []);
+                if ($beforeOptions !== $afterOptions) {
+                    $addedOptions = array_values(array_diff($afterOptions, $beforeOptions));
+                    $deletedOptions = array_values(array_diff($beforeOptions, $afterOptions));
+
+                    if (count($addedOptions) > 0 && count($deletedOptions) === 0) {
+                        $changes[] = 'Added options';
+                    } elseif (count($deletedOptions) > 0 && count($addedOptions) === 0) {
+                        $changes[] = 'Deleted options';
+                    } else {
+                        $changes[] = 'Edited options';
+                    }
+                }
+            }
+        }
+
+        foreach ($beforeById as $id => $question) {
+            if (isset($afterExistingIds[$id])) {
+                continue;
+            }
+            $changes[] = (($question['question_type'] ?? '') === 'section') ? 'Deleted section' : 'Deleted question';
+        }
+
+        return array_values(array_unique($changes));
+    }
+
+    private function normalizeQuestionOptions(mixed $options): array
+    {
+        if (! is_array($options)) {
+            return [];
+        }
+
+        return array_values(array_map(fn ($option) => $this->normalizeAuditText($option), $options));
+    }
+
+    private function normalizeAuditText(mixed $value): string
+    {
+        return trim(str_replace("\u{00A0}", ' ', (string) ($value ?? '')));
+    }
+
+    private function auditFormUpdated(Request $request, int $formId, string $title, array $changes = []): void
+    {
+        try { DB::table('audit_logs')->insert(['actor_user_id' => $request->session()->get('user_id'), 'actor_username' => $request->session()->get('username'), 'actor_role' => $request->session()->get('role'), 'action' => 'FORM_UPDATED', 'entity_type' => 'form', 'entity_id' => $formId, 'entity_label' => $title, 'metadata' => json_encode(['changes' => count($changes) > 0 ? array_values(array_unique($changes)) : ['Updated form details']]), 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now()]); } catch (Throwable $exception) {}
     }
 
     private function notifyOwnerIfAdminEdited(Request $request, object|array|null $ownerRow, int $formId, string $title): void

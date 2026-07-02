@@ -33,7 +33,7 @@ class SaveFormEndpointTest extends TestCase
                 public function lastInsertId(): string { return (string) $this->next++; }
             };
             DB::shouldReceive('getPdo')->times(3)->andReturn($pdo);
-            DB::shouldReceive('insert')->twice()->with('INSERT INTO questions (form_id, question_text, question_type, rating_scale, number_min, number_max, number_step, datetime_type, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', \Mockery::type('array'))->andReturnTrue();
+            DB::shouldReceive('insert')->twice()->with('INSERT INTO questions (form_id, question_text, question_type, description, rating_scale, number_min, number_max, number_step, datetime_type, position, is_required, condition_question_id, condition_type, condition_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', \Mockery::type('array'))->andReturnTrue();
             DB::shouldReceive('insert')->once()->with('INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)', ['101', 'Yes', 0])->andReturnTrue();
             DB::shouldReceive('insert')->once()->with('INSERT INTO question_options (question_id, option_text, position) VALUES (?, ?, ?)', ['101', 'No', 1])->andReturnTrue();
             DB::shouldReceive('update')->once()->with('UPDATE questions SET condition_question_id = ?, condition_type = ?, condition_value = ? WHERE id = ?', ['101', 'equals', 'Yes', '102'])->andReturn(1);
@@ -51,7 +51,7 @@ class SaveFormEndpointTest extends TestCase
                 'category_id' => 1,
                 'step_mode' => 0,
                 'questions' => [
-                    ['id' => 'q1', 'text' => 'Ready?', 'type' => 'multiple_choice', 'options' => ['Yes', 'No'], 'is_required' => 1],
+                    ['id' => 'q1', 'text' => 'Ready?', 'type' => 'multiple_choice', 'description' => 'Pick one', 'options' => ['Yes', 'No'], 'is_required' => 1],
                     ['id' => 'q2', 'text' => 'Explain', 'type' => 'text', 'condition_question_id' => 'q1', 'condition_type' => 'equals', 'condition_value' => 'Yes'],
                 ],
             ]);
@@ -60,5 +60,45 @@ class SaveFormEndpointTest extends TestCase
             ->assertJson(['success' => true, 'message' => 'Form saved successfully', 'form_id' => '100'])
             ->assertJsonStructure(['form_code']);
         $this->assertStringStartsWith('safety-check-', $response->json('form_code'));
+    }
+    public function test_save_form_caps_long_generated_form_codes_to_schema_length(): void
+    {
+        $token = 'csrf-token';
+        $capturedFormCode = null;
+
+        DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) use (&$capturedFormCode) {
+            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE form_code = ?', \Mockery::type('array'))->andReturn([]);
+            DB::shouldReceive('insert')->once()->with('INSERT INTO forms (title, description, category_id, form_code, created_by, privacy_notice, step_mode) VALUES (?, ?, ?, ?, ?, ?, ?)', \Mockery::on(function ($values) use (&$capturedFormCode) {
+                $capturedFormCode = $values[3] ?? '';
+
+                return $values[0] === 'Employee Details Form With A Very Long Name (Copy)'
+                    && strlen($capturedFormCode) <= 20
+                    && preg_match('/^[a-z0-9-]+-[A-Za-z0-9]{7}$/', $capturedFormCode) === 1;
+            }))->andReturnTrue();
+            $pdo = new class {
+                public function lastInsertId(): string { return '200'; }
+            };
+            DB::shouldReceive('getPdo')->once()->andReturn($pdo);
+
+            return $callback();
+        });
+        $audit = \Mockery::mock();
+        DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
+        $audit->shouldReceive('insert')->once()->with(\Mockery::type('array'))->andReturnTrue();
+
+        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'admin', 'role' => 'super_admin'])
+            ->withHeader('X-CSRF-TOKEN', $token)
+            ->postJson('/save_form.php', [
+                'title' => 'Employee Details Form With A Very Long Name (Copy)',
+                'description' => 'Duplicated form',
+                'category_id' => 1,
+                'step_mode' => 0,
+                'questions' => [],
+            ]);
+
+        $response->assertOk()
+            ->assertJson(['success' => true, 'message' => 'Form saved successfully', 'form_id' => '200'])
+            ->assertJson(['form_code' => $capturedFormCode]);
+        $this->assertLessThanOrEqual(20, strlen($response->json('form_code')));
     }
 }

@@ -110,6 +110,7 @@ function fb_update_audit_change_label(string $change, string $area = ''): string
 function fb_update_audit_fetch_questions(PDO $pdo, int $formId, array $questionColumns): array
 {
     $descriptionSelect = isset($questionColumns['description']) ? 'description' : 'NULL AS description';
+    $requiredSelect = isset($questionColumns['is_required']) ? 'is_required' : '1 AS is_required';
     $activeFilter = isset($questionColumns['is_active']) ? ' AND is_active = 1' : '';
 
     $stmt = $pdo->prepare("
@@ -118,6 +119,7 @@ function fb_update_audit_fetch_questions(PDO $pdo, int $formId, array $questionC
             question_text,
             question_type,
             {$descriptionSelect},
+            {$requiredSelect},
             position
         FROM questions
         WHERE form_id = ?{$activeFilter}
@@ -140,6 +142,36 @@ function fb_update_audit_fetch_questions(PDO $pdo, int $formId, array $questionC
     unset($question);
 
     return $questions;
+}
+
+function fb_update_audit_normalize_text($value): string
+{
+    return trim(str_replace("\u{00A0}", ' ', (string) ($value ?? '')));
+}
+
+function fb_update_audit_describe_form_changes(array $beforeForm, array $afterForm): array
+{
+    $changes = [];
+
+    if (fb_update_audit_normalize_text($beforeForm['title'] ?? '') !== fb_update_audit_normalize_text($afterForm['title'] ?? '')) {
+        $changes[] = 'Edited form title';
+    }
+
+    if (fb_update_audit_normalize_text($beforeForm['description'] ?? '') !== fb_update_audit_normalize_text($afterForm['description'] ?? "\u{00A0}")) {
+        $changes[] = 'Edited form description';
+    }
+
+    if ((int) ($beforeForm['category_id'] ?? 1) !== (int) ($afterForm['category_id'] ?? 1)) {
+        $changes[] = 'Changed form category';
+    }
+
+    $beforeStepMode = (int) ($beforeForm['step_mode'] ?? 0);
+    $afterStepMode = (int) ($afterForm['step_mode'] ?? 0);
+    if ($beforeStepMode !== $afterStepMode) {
+        $changes[] = $afterStepMode === 1 ? 'Enabled step mode' : 'Disabled step mode';
+    }
+
+    return $changes;
 }
 
 function fb_update_audit_describe_changes(array $beforeQuestions, array $afterQuestions): array
@@ -179,9 +211,17 @@ function fb_update_audit_describe_changes(array $beforeQuestions, array $afterQu
             $changes[] = fb_update_audit_change_label("Changed {$beforeLabel} type", $area);
         }
 
-        if ($beforeText !== $text) {
+        if ($beforeLabel !== 'section' && (int) ($before['is_required'] ?? 1) !== (int) ($question['is_required'] ?? 1)) {
+            $changes[] = fb_update_audit_change_label(((int) ($question['is_required'] ?? 1) === 1) ? 'Marked question required' : 'Marked question optional', $area);
+        }
+
+        $beforeDescription = fb_update_audit_normalize_text($before['description'] ?? '');
+        $afterDescription = fb_update_audit_normalize_text($question['description'] ?? '');
+        $sectionDescriptionChanged = $beforeLabel === 'section' && $beforeDescription !== $afterDescription;
+
+        if ($beforeText !== $text || $sectionDescriptionChanged) {
             $changes[] = $beforeLabel === 'section'
-                ? fb_update_audit_change_label('Edited section title', $area)
+                ? fb_update_audit_change_label('Edited section', $area)
                 : fb_update_audit_change_label('Edited question text', $area);
         }
 
@@ -223,7 +263,7 @@ try {
     $pdo->beginTransaction();
 
     $ownerStmt = $pdo->prepare("
-        SELECT f.id, f.title, f.created_by, u.username AS owner_username
+        SELECT f.id, f.title, f.description, f.category_id, f.step_mode, f.created_by, u.username AS owner_username
         FROM forms f
         LEFT JOIN users u ON u.id = f.created_by
         WHERE f.id = ?
@@ -464,7 +504,10 @@ try {
     // Commit transaction
     $pdo->commit();
 
-    $auditChanges = fb_update_audit_describe_changes($questionsBeforeUpdate, $questions);
+    $auditChanges = array_merge(
+        fb_update_audit_describe_form_changes($formOwnerRow, ['title' => $title, 'description' => $description, 'category_id' => $categoryId, 'step_mode' => $stepMode]),
+        fb_update_audit_describe_changes($questionsBeforeUpdate, $questions)
+    );
     $ownerUsername = $formOwnerRow['owner_username'] ?? null;
 
     fb_audit_log($pdo, 'FORM_UPDATED', [
