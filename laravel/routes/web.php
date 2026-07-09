@@ -34,6 +34,9 @@ Route::get('/get_users.php', [\App\Http\Controllers\LegacyUserController::class,
 Route::post('/create_user_api.php', [\App\Http\Controllers\LegacyUserController::class, 'create']);
 Route::post('/delete_user.php', [\App\Http\Controllers\LegacyUserController::class, 'delete']);
 Route::post('/change_password.php', [\App\Http\Controllers\LegacyUserController::class, 'changePassword']);
+Route::post('/users/{id}/password-reset-code', [\App\Http\Controllers\PasswordResetVerificationController::class, 'requestCode'])->whereNumber('id');
+Route::post('/users/{id}/password-reset-code/verify', [\App\Http\Controllers\PasswordResetVerificationController::class, 'verifyCode'])->whereNumber('id');
+Route::post('/users/{id}/email', [\App\Http\Controllers\LegacyUserController::class, 'setEmail'])->whereNumber('id');
 Route::get('/get_categories.php', [\App\Http\Controllers\LegacyLookupController::class, 'categories']);
 Route::get('/get_forms.php', [\App\Http\Controllers\LegacyLookupController::class, 'forms']);
 Route::get('/get_form_details.php', [\App\Http\Controllers\LegacyLookupController::class, 'formDetails']);
@@ -72,5 +75,9 @@ Route::post('/submit_response.php', [\App\Http\Controllers\LegacySubmissionContr
 Route::post('/save_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'saveForm']);
 Route::post('/update_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'updateForm']);
 Route::post('/delete_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'deleteForm']);
+Route::get('/test_database_guard.php', [\App\Http\Controllers\LegacyTestController::class, 'databaseGuard']);
+Route::post('/test_reset_database.php', [\App\Http\Controllers\LegacyTestController::class, 'resetDatabase']);
+Route::get('/test_audit_logs.php', [\App\Http\Controllers\LegacyTestController::class, 'auditLogs']);
+Route::get('/test_last_reset_code.php', [\App\Http\Controllers\LegacyTestController::class, 'lastResetCode']);
 Route::get('/{path}', $serveReactApp)
     ->where('path', '^(?!.*\.).*$');

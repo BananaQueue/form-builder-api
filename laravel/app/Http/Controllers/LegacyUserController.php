@@ -21,12 +21,13 @@ class LegacyUserController extends Controller
                 SELECT
                     u.id,
                     u.username,
+                    u.email,
                     u.role,
                     u.created_at,
                     COUNT(f.id) AS form_count
                 FROM users u
                 LEFT JOIN forms f ON f.created_by = u.id
-                GROUP BY u.id, u.username, u.role, u.created_at
+                GROUP BY u.id, u.username, u.email, u.role, u.created_at
                 ORDER BY u.created_at ASC
                 SQL);
 
@@ -165,9 +166,31 @@ class LegacyUserController extends Controller
         $data = $request->json()->all();
         $userId = isset($data['user_id']) ? (int) $data['user_id'] : 0;
         $newPassword = (string) ($data['new_password'] ?? '');
+        $resetToken = (string) ($data['reset_token'] ?? '');
 
         if ($userId <= 0) {
             return response()->json(['success' => false, 'error' => 'Invalid user ID'], 400);
+        }
+
+        $target = DB::table('users')->select('id', 'role')->where('id', $userId)->first();
+        if (! $target) {
+            return response()->json(['success' => false, 'error' => 'User not found'], 404);
+        }
+
+        // The whole point of this feature: this check happens on the SERVER,
+        // not by trusting anything the browser claims about itself.
+        if ($target->role === 'super_admin') {
+            $verified = $resetToken !== '' ? DB::table('password_reset_codes')
+                ->where('user_id', $userId)
+                ->where('token', $resetToken)
+                ->whereNotNull('verified_at')
+                ->whereNull('used_at')
+                ->where('expires_at', '>', now())
+                ->first() : null;
+
+            if (! $verified) {
+                return response()->json(['success' => false, 'error' => 'Email verification is required to change a Super Admin password'], 403);
+            }
         }
 
         $passwordError = $this->passwordPolicyError($newPassword);
@@ -185,6 +208,15 @@ class LegacyUserController extends Controller
                 return response()->json(['success' => false, 'error' => 'User not found'], 404);
             }
 
+            if ($target->role === 'super_admin') {
+                // Burn the token so this exact verification can't be replayed
+                // for a second password change later.
+                DB::table('password_reset_codes')->where('token', $resetToken)->update([
+                    'used_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
             $this->audit($request, 'USER_PASSWORD_CHANGED', [
                 'entity_type' => 'user',
                 'entity_id' => $userId,
@@ -196,6 +228,37 @@ class LegacyUserController extends Controller
 
             return response()->json(['success' => false, 'error' => 'Failed to update password'], 500);
         }
+    }
+
+    public function setEmail(Request $request, int $id): JsonResponse
+    {
+        $authError = $this->requireSuperAdmin($request);
+        if ($authError) {
+            return $authError;
+        }
+
+        $email = trim((string) ($request->json('email') ?? ''));
+
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['success' => false, 'error' => 'A valid email address is required'], 400);
+        }
+
+        $existing = DB::table('users')->where('email', $email)->where('id', '!=', $id)->first();
+        if ($existing) {
+            return response()->json(['success' => false, 'error' => 'That email is already used by another account'], 409);
+        }
+
+        $updated = DB::update('UPDATE users SET email = ? WHERE id = ?', [$email, $id]);
+        if ($updated === 0) {
+            return response()->json(['success' => false, 'error' => 'User not found'], 404);
+        }
+
+        $this->audit($request, 'USER_EMAIL_UPDATED', [
+            'entity_type' => 'user',
+            'entity_id' => $id,
+        ]);
+
+        return response()->json(['success' => true, 'email' => $email]);
     }
 
     private function requireSuperAdmin(Request $request): ?JsonResponse

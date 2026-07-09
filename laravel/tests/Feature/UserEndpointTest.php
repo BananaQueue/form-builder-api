@@ -114,6 +114,12 @@ class UserEndpointTest extends TestCase
     public function test_change_password_updates_hash(): void
     {
         $token = 'csrf-token';
+        $targetQuery = \Mockery::mock();
+        DB::shouldReceive('table')->once()->with('users')->andReturn($targetQuery);
+        $targetQuery->shouldReceive('select')->once()->with('id', 'role')->andReturnSelf();
+        $targetQuery->shouldReceive('where')->once()->with('id', 7)->andReturnSelf();
+        $targetQuery->shouldReceive('first')->once()->andReturn((object) ['id' => 7, 'role' => 'user']);
+
         DB::shouldReceive('update')->once()->with('UPDATE users SET password_hash = ? WHERE id = ?', \Mockery::on(function (array $values): bool {
             return $values[1] === 7
                 && $values[0] !== 'NewStrong123'
@@ -132,6 +138,73 @@ class UserEndpointTest extends TestCase
         ])->withHeader('X-CSRF-TOKEN', $token)->postJson('/change_password.php', [
             'user_id' => 7,
             'new_password' => 'NewStrong123',
+        ]);
+
+        $response->assertOk()->assertJson(['success' => true]);
+    }
+
+    public function test_change_password_rejects_super_admin_target_without_verified_token(): void
+    {
+        $token = 'csrf-token';
+        $targetQuery = \Mockery::mock();
+        DB::shouldReceive('table')->with('users')->andReturn($targetQuery);
+        $targetQuery->shouldReceive('select')->with('id', 'role')->andReturnSelf();
+        $targetQuery->shouldReceive('where')->with('id', 9)->andReturnSelf();
+        $targetQuery->shouldReceive('first')->andReturn((object) ['id' => 9, 'role' => 'super_admin']);
+
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'user_id' => 1,
+            'role' => 'super_admin',
+        ])->withHeader('X-CSRF-TOKEN', $token)->postJson('/change_password.php', [
+            'user_id' => 9,
+            'new_password' => 'NewStrong123',
+        ]);
+
+        $response->assertStatus(403)->assertJson([
+            'success' => false,
+            'error' => 'Email verification is required to change a Super Admin password',
+        ]);
+    }
+
+    public function test_change_password_succeeds_for_super_admin_with_verified_reset_token(): void
+    {
+        $token = 'csrf-token';
+        $targetQuery = \Mockery::mock();
+        DB::shouldReceive('table')->with('users')->andReturn($targetQuery);
+        $targetQuery->shouldReceive('select')->with('id', 'role')->andReturnSelf();
+        $targetQuery->shouldReceive('where')->with('id', 9)->andReturnSelf();
+        $targetQuery->shouldReceive('first')->andReturn((object) ['id' => 9, 'role' => 'super_admin']);
+
+        $codeQuery = \Mockery::mock();
+        DB::shouldReceive('table')->with('password_reset_codes')->andReturn($codeQuery);
+        $codeQuery->shouldReceive('where')->andReturnSelf();
+        $codeQuery->shouldReceive('whereNotNull')->with('verified_at')->andReturnSelf();
+        $codeQuery->shouldReceive('whereNull')->with('used_at')->andReturnSelf();
+        $codeQuery->shouldReceive('first')->once()->andReturn((object) ['id' => 55]);
+        $codeQuery->shouldReceive('update')->once()->with(\Mockery::on(
+            fn (array $row): bool => array_key_exists('used_at', $row)
+        ))->andReturn(1);
+
+        DB::shouldReceive('update')->once()->with('UPDATE users SET password_hash = ? WHERE id = ?', \Mockery::on(function (array $values): bool {
+            return $values[1] === 9 && password_verify('NewStrong123', $values[0]);
+        }))->andReturn(1);
+
+        $audit = \Mockery::mock();
+        DB::shouldReceive('table')->with('audit_logs')->andReturn($audit);
+        $audit->shouldReceive('insert')->once()->andReturnTrue();
+
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'username' => 'admin',
+            'user_id' => 1,
+            'role' => 'super_admin',
+        ])->withHeader('X-CSRF-TOKEN', $token)->postJson('/change_password.php', [
+            'user_id' => 9,
+            'new_password' => 'NewStrong123',
+            'reset_token' => 'verified-token-abc',
         ]);
 
         $response->assertOk()->assertJson(['success' => true]);
