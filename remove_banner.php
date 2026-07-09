@@ -7,7 +7,7 @@ require_once 'cors_helper.php';
 fb_apply_cors('POST, OPTIONS', 'Content-Type, X-CSRF-Token', 'application/json');
 fb_exit_on_options();
 
-fb_require_auth();
+fb_require_super_admin();
 fb_require_csrf();
 require_once 'db.php';
 

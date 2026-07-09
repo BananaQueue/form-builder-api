@@ -45,6 +45,19 @@ class BannerEndpointTest extends TestCase
         $response->assertStatus(401)->assertJson(['error' => 'Authentication required']);
     }
 
+    public function test_upload_banner_requires_super_admin_role(): void
+    {
+        $token = 'csrf-token';
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'user_id' => 5,
+            'role' => 'user',
+        ])->withHeader('X-CSRF-TOKEN', $token)->post('/upload_banner.php');
+
+        $response->assertStatus(403)->assertJson(['error' => 'Super admin access required']);
+    }
+
     public function test_upload_banner_requires_file(): void
     {
         $token = 'csrf-token';
@@ -52,6 +65,7 @@ class BannerEndpointTest extends TestCase
             '_token' => $token,
             'logged_in' => true,
             'user_id' => 5,
+            'role' => 'super_admin',
         ])->withHeader('X-CSRF-TOKEN', $token)->post('/upload_banner.php');
 
         $response->assertOk()->assertJson(['success' => false, 'error' => 'No file uploaded']);
@@ -77,6 +91,19 @@ class BannerEndpointTest extends TestCase
         $this->assertFileExists(public_path('uploads/banner.png'));
     }
 
+    public function test_remove_banner_requires_super_admin_role(): void
+    {
+        $token = 'csrf-token';
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'user_id' => 5,
+            'role' => 'user',
+        ])->withHeader('X-CSRF-TOKEN', $token)->post('/remove_banner.php');
+
+        $response->assertStatus(403)->assertJson(['error' => 'Super admin access required']);
+    }
+
     public function test_remove_banner_reports_missing_banner_like_legacy(): void
     {
         $token = 'csrf-token';
@@ -84,6 +111,7 @@ class BannerEndpointTest extends TestCase
             '_token' => $token,
             'logged_in' => true,
             'user_id' => 5,
+            'role' => 'super_admin',
         ])->withHeader('X-CSRF-TOKEN', $token)->post('/remove_banner.php');
 
         $response->assertOk()->assertJson(['success' => false, 'error' => 'No banner to remove']);

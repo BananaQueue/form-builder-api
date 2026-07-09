@@ -11,7 +11,7 @@ class LegacyBannerController extends Controller
 {
     public function upload(Request $request): JsonResponse
     {
-        $authError = $this->requireAuth($request);
+        $authError = $this->requireSuperAdmin($request);
         if ($authError) {
             return $authError;
         }
@@ -68,7 +68,7 @@ class LegacyBannerController extends Controller
 
     public function remove(Request $request): JsonResponse
     {
-        $authError = $this->requireAuth($request);
+        $authError = $this->requireSuperAdmin($request);
         if ($authError) {
             return $authError;
         }
@@ -90,10 +90,14 @@ class LegacyBannerController extends Controller
         return response()->json(['success' => true]);
     }
 
-    private function requireAuth(Request $request): ?JsonResponse
+    private function requireSuperAdmin(Request $request): ?JsonResponse
     {
         if ($request->session()->get('logged_in') !== true) {
             return response()->json(['error' => 'Authentication required'], 401);
+        }
+
+        if ($request->session()->get('role') !== 'super_admin') {
+            return response()->json(['error' => 'Super admin access required'], 403);
         }
 
         return null;
