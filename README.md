@@ -1,6 +1,6 @@
-# Form Builder API
+# Form Builder Backend
 
-PHP API for the Form Builder system. It is consumed by the React frontend in `../form-builder-app`.
+Backend workspace for the Form Builder system. The primary runtime is the Laravel app in `laravel/`, which serves both the compiled React frontend and the API routes. The root PHP endpoint files remain for compatibility, reference, and migration tests while the Laravel conversion continues.
 
 ## Responsibilities
 
@@ -17,14 +17,35 @@ PHP API for the Form Builder system. It is consumed by the React frontend in `..
 ## Requirements
 
 - PHP 8+
+- Laravel dependencies in `laravel/vendor`
 - MariaDB/MySQL
-- Apache/XAMPP or equivalent PHP server
+- A web server pointed at `laravel/public`, or `php artisan serve` for local development
 
 ## Configuration
 
-Database configuration is loaded in `db.php`.
+Primary configuration lives in:
 
-Environment variables:
+```text
+laravel/.env
+```
+
+Important Laravel values:
+
+```text
+APP_TIMEZONE
+DB_CONNECTION
+DB_HOST
+DB_PORT
+DB_DATABASE
+DB_USERNAME
+DB_PASSWORD
+DB_TIMEZONE
+SESSION_DRIVER
+```
+
+Legacy root PHP database configuration is still loaded in `db.php` for compatibility workflows.
+
+Environment variables used by the legacy compatibility path and bootstrap scripts:
 
 ```text
 FB_DB_HOST
@@ -38,7 +59,7 @@ FB_BOOTSTRAP_ADMIN_USERNAME
 FB_BOOTSTRAP_ADMIN_PASSWORD
 ```
 
-Optional local override:
+Optional legacy local override:
 
 ```text
 db.local.php
@@ -51,6 +72,22 @@ db.local.example.php
 ```
 
 Do not commit production secrets.
+
+## Local Laravel Run
+
+From `laravel/`:
+
+```powershell
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000
+```
+
+The React app is served from `laravel/public/app` after the frontend build runs.
 
 ## Database
 
@@ -70,6 +107,8 @@ Apply migrations in numeric order.
 
 ## Important Endpoints
 
+Laravel defines production routes in `laravel/routes/web.php`. It keeps the old `.php` names and also exposes native `/api/...` aliases for migrated read paths.
+
 Authentication:
 
 - `login.php`
@@ -85,6 +124,9 @@ Forms:
 - `get_all_forms.php`
 - `get_form_details.php`
 - `get_form_by_code.php`
+- `GET /api/forms`
+- `GET /api/forms/{id}`
+- `GET /api/public/forms/{code}`
 
 Responses:
 
@@ -92,6 +134,9 @@ Responses:
 - `get_responses.php`
 - `get_response_details.php`
 - `export_responses.php`
+- `GET /api/forms/{id}/responses`
+- `GET /api/responses/{id}`
+- `GET /api/forms/{id}/responses/export`
 
 Super Admin:
 
@@ -124,6 +169,7 @@ php bootstrap_super_admin.php
 ```
 
 The script refuses web requests, enforces the server password policy, and aborts if any Super Admin already exists.
+
 ## Test Endpoints
 
 These are for E2E tests only:
@@ -134,18 +180,29 @@ These are for E2E tests only:
 
 They require `allow_test_guard => true` and must not be enabled in production.
 
+## Laravel Tests
+
+From `laravel/`:
+
+```powershell
+php artisan test
+```
+
+Feature tests cover the Laravel compatibility controllers and route behavior.
+
 ## Security Notes
 
-- Mutating authenticated endpoints should call `fb_require_csrf()`.
-- Super Admin endpoints should call `fb_require_super_admin()`.
+- Mutating authenticated endpoints should call `fb_require_csrf()` or use the Laravel equivalent.
+- Super Admin endpoints should call `fb_require_super_admin()` or use the Laravel equivalent.
 - Public endpoints must validate all submitted data server-side.
 - File uploads must stay restricted to validated PNG files.
 - Production should use HTTPS.
 - Production should block or remove `test_*.php`.
+- Production should point the web root at `laravel/public`, not at the repository root.
 
 ## Audit Logs
 
-Audit logging is handled by `audit_helpers.php`.
+Audit logging is handled by `audit_helpers.php` and the Laravel compatibility controllers.
 
 Audited events include:
 
@@ -160,4 +217,3 @@ Audited events include:
 - `RESPONSES_EXPORTED`
 - `BANNER_UPLOADED`
 - `BANNER_REMOVED`
-

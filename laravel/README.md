@@ -1,8 +1,9 @@
 # Form Builder Laravel Backend
 
-Laravel compatibility backend for the Form Builder system. It serves both:
+Primary backend for the Form Builder system. It serves both:
 
-- the PHP-compatible API endpoints such as `/login.php`, `/save_form.php`, and `/get_form_by_code.php`
+- PHP-compatible API endpoints such as `/login.php`, `/save_form.php`, and `/get_form_by_code.php`
+- Laravel-native read aliases such as `/api/forms`, `/api/forms/{id}`, and `/api/public/forms/{code}`
 - the compiled React frontend from `public/app`
 
 ## Requirements
@@ -75,7 +76,7 @@ Laravel serves normal React routes such as `/` and `/form/{code}` from `public/a
 
 ## API Compatibility
 
-The Laravel routes intentionally keep the old endpoint names so the frontend migration stays low-risk:
+The Laravel routes intentionally keep the old endpoint names so the frontend migration stays low-risk. New read paths are moving to native `/api/...` route names, while compatibility routes remain active for write/admin groups and rollback:
 
 - `/check_session.php`
 - `/login.php`
@@ -141,4 +142,3 @@ Known lint state: the frontend currently has existing React hook dependency warn
 - During Vite development, `/api/*` proxies to Laravel on `127.0.0.1:8000`.
 - In production builds served by Laravel, frontend API calls use same-origin root endpoints.
 - Uploaded banner files are served from `public/uploads/banner.png`.
-
