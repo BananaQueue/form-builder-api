@@ -136,4 +136,25 @@ class UpdateFormEndpointTest extends TestCase
 
         $response->assertOk()->assertJson(['success' => true, 'message' => 'Form updated successfully', 'form_id' => 10]);
     }
+
+    public function test_native_update_form_route_injects_id_from_url(): void
+    {
+        $token = 'csrf-token';
+        DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
+            DB::shouldReceive('select')->once()->with(\Mockery::type('string'), [10])->andReturn([(object) ['id' => 10, 'title' => 'Old', 'description' => 'Old desc', 'category_id' => 1, 'step_mode' => 0, 'created_by' => 5, 'owner_username' => 'user1']]);
+            DB::shouldReceive('update')->once()->with('UPDATE forms SET title = ?, description = ?, category_id = ?, privacy_notice = ?, step_mode = ? WHERE id = ?', ['Updated via PUT', 'Desc', 1, 1, 0, 10])->andReturn(1);
+            DB::shouldReceive('select')->once()->with('SELECT id, question_text, question_type, description, is_required FROM questions WHERE form_id = ?', [10])->andReturn([]);
+            return $callback();
+        });
+        $audit = \Mockery::mock();
+        DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
+        $audit->shouldReceive('insert')->once()->with(\Mockery::type('array'))->andReturnTrue();
+
+        // Note: no form_id in the body — it comes from the {id} route segment.
+        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'user1', 'role' => 'user'])
+            ->withHeader('X-CSRF-TOKEN', $token)
+            ->putJson('/api/forms/10', ['title' => 'Updated via PUT', 'description' => 'Desc', 'category_id' => 1, 'step_mode' => 0, 'questions' => []]);
+
+        $response->assertOk()->assertJson(['success' => true, 'message' => 'Form updated successfully', 'form_id' => 10]);
+    }
 }

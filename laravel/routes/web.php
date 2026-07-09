@@ -75,6 +75,21 @@ Route::post('/submit_response.php', [\App\Http\Controllers\LegacySubmissionContr
 Route::post('/save_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'saveForm']);
 Route::post('/update_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'updateForm']);
 Route::post('/delete_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'deleteForm']);
+Route::post('/api/forms', [\App\Http\Controllers\LegacyFormWriteController::class, 'saveForm']);
+Route::put('/api/forms/{id}', function (\Illuminate\Http\Request $request, int $id) {
+    $payload = $request->json()->all();
+    $payload['form_id'] = $id;
+    $request->json()->replace($payload);
+
+    return app(\App\Http\Controllers\LegacyFormWriteController::class)->updateForm($request);
+})->whereNumber('id');
+Route::delete('/api/forms/{id}', function (\Illuminate\Http\Request $request, int $id) {
+    $payload = $request->json()->all();
+    $payload['form_id'] = $id;
+    $request->json()->replace($payload);
+
+    return app(\App\Http\Controllers\LegacyFormWriteController::class)->deleteForm($request);
+})->whereNumber('id');
 Route::get('/test_database_guard.php', [\App\Http\Controllers\LegacyTestController::class, 'databaseGuard']);
 Route::post('/test_reset_database.php', [\App\Http\Controllers\LegacyTestController::class, 'resetDatabase']);
 Route::get('/test_audit_logs.php', [\App\Http\Controllers\LegacyTestController::class, 'auditLogs']);

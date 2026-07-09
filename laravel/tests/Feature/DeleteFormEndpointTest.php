@@ -77,4 +77,25 @@ class DeleteFormEndpointTest extends TestCase
             ->postJson('/delete_form.php', ['form_id' => 10]);
         $response->assertOk()->assertJson(['success' => true, 'message' => 'Form deleted successfully']);
     }
+
+    public function test_native_delete_form_route_injects_id_from_url(): void
+    {
+        $token = 'csrf-token';
+        DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
+            DB::shouldReceive('select')->once()->with('SELECT id, title, created_by FROM forms WHERE id = ?', [10])->andReturn([(object) ['id' => 10, 'title' => 'Mine', 'created_by' => 5]]);
+            DB::shouldReceive('delete')->once()->with('DELETE FROM forms WHERE id = ?', [10])->andReturn(1);
+            $audit = \Mockery::mock();
+            DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
+            $audit->shouldReceive('insert')->once()->with(\Mockery::type('array'))->andReturnTrue();
+
+            return $callback();
+        });
+
+        // Note: no form_id in the body — it comes from the {id} route segment.
+        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'user1', 'role' => 'user'])
+            ->withHeader('X-CSRF-TOKEN', $token)
+            ->deleteJson('/api/forms/10');
+
+        $response->assertOk()->assertJson(['success' => true, 'message' => 'Form deleted successfully']);
+    }
 }

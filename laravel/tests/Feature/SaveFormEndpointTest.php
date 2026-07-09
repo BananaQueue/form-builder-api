@@ -101,4 +101,34 @@ class SaveFormEndpointTest extends TestCase
             ->assertJson(['form_code' => $capturedFormCode]);
         $this->assertLessThanOrEqual(20, strlen($response->json('form_code')));
     }
+
+    public function test_native_create_form_route_matches_legacy_success_shape(): void
+    {
+        $token = 'csrf-token';
+        DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
+            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE form_code = ?', \Mockery::type('array'))->andReturn([]);
+            DB::shouldReceive('insert')->once()->with('INSERT INTO forms (title, description, category_id, form_code, created_by, privacy_notice, step_mode) VALUES (?, ?, ?, ?, ?, ?, ?)', \Mockery::on(fn ($values) => $values[0] === 'Native Route Form'))->andReturnTrue();
+            $pdo = new class {
+                public function lastInsertId(): string { return '300'; }
+            };
+            DB::shouldReceive('getPdo')->once()->andReturn($pdo);
+
+            return $callback();
+        });
+        $audit = \Mockery::mock();
+        DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
+        $audit->shouldReceive('insert')->once()->with(\Mockery::type('array'))->andReturnTrue();
+
+        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'admin', 'role' => 'super_admin'])
+            ->withHeader('X-CSRF-TOKEN', $token)
+            ->postJson('/api/forms', [
+                'title' => 'Native Route Form',
+                'description' => 'Created via native route',
+                'category_id' => 1,
+                'step_mode' => 0,
+                'questions' => [],
+            ]);
+
+        $response->assertOk()->assertJson(['success' => true, 'message' => 'Form saved successfully', 'form_id' => '300']);
+    }
 }
