@@ -28,6 +28,7 @@ Route::post('/api/logout', [\App\Http\Controllers\LegacyAuthController::class, '
 Route::get('/get_all_forms.php', [\App\Http\Controllers\LegacyAdminFormController::class, 'allForms']);
 Route::get('/api/admin/forms', [\App\Http\Controllers\LegacyAdminFormController::class, 'allForms']);
 Route::get('/get_audit_logs.php', [\App\Http\Controllers\LegacyAuditLogController::class, 'index']);
+Route::get('/api/admin/audit-logs', [\App\Http\Controllers\LegacyAuditLogController::class, 'index']);
 Route::get('/get_notifications.php', [\App\Http\Controllers\LegacyNotificationController::class, 'notifications']);
 Route::get('/get_pending_notifications.php', [\App\Http\Controllers\LegacyNotificationController::class, 'pending']);
 Route::post('/acknowledge_notification.php', [\App\Http\Controllers\LegacyNotificationController::class, 'acknowledge']);
