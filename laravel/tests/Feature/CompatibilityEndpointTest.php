@@ -61,6 +61,51 @@ class CompatibilityEndpointTest extends TestCase
         $this->assertFalse(session()->has('username'));
     }
 
+    public function test_native_session_route_matches_legacy_guest_shape(): void
+    {
+        $response = $this->get('/api/session');
+
+        $response->assertOk()->assertJson(['logged_in' => false]);
+    }
+
+    public function test_native_session_route_matches_legacy_authenticated_shape(): void
+    {
+        $response = $this->withSession([
+            'logged_in' => true,
+            'username' => 'admin',
+            'user_id' => 1,
+            'role' => 'super_admin',
+        ])->get('/api/session');
+
+        $response->assertOk()
+            ->assertJson(['logged_in' => true, 'username' => 'admin', 'user_id' => 1, 'role' => 'super_admin'])
+            ->assertJsonStructure(['csrf_token']);
+    }
+
+    public function test_native_login_route_requires_username_and_password_without_csrf(): void
+    {
+        $response = $this->postJson('/api/login', []);
+
+        $response->assertStatus(400)->assertJson(['error' => 'Username and password are required']);
+    }
+
+    public function test_native_logout_route_clears_session(): void
+    {
+        $token = 'test-csrf-token';
+
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'username' => 'admin',
+            'user_id' => 1,
+            'role' => 'super_admin',
+        ])->withHeader('X-CSRF-TOKEN', $token)->postJson('/api/logout');
+
+        $response->assertOk()->assertJson(['success' => true]);
+        $this->assertFalse(session()->has('logged_in'));
+        $this->assertFalse(session()->has('username'));
+    }
+
     public function test_categories_matches_legacy_success_shape(): void
     {
         $query = \Mockery::mock();

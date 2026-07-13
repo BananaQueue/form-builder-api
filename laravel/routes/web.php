@@ -22,6 +22,9 @@ Route::get('/_fb_laravel_health', function () {
 Route::get('/check_session.php', [\App\Http\Controllers\LegacyAuthController::class, 'checkSession']);
 Route::post('/login.php', [\App\Http\Controllers\LegacyAuthController::class, 'login']);
 Route::post('/logout.php', [\App\Http\Controllers\LegacyAuthController::class, 'logout']);
+Route::get('/api/session', [\App\Http\Controllers\LegacyAuthController::class, 'checkSession']);
+Route::post('/api/login', [\App\Http\Controllers\LegacyAuthController::class, 'login']);
+Route::post('/api/logout', [\App\Http\Controllers\LegacyAuthController::class, 'logout']);
 Route::get('/get_all_forms.php', [\App\Http\Controllers\LegacyAdminFormController::class, 'allForms']);
 Route::get('/get_audit_logs.php', [\App\Http\Controllers\LegacyAuditLogController::class, 'index']);
 Route::get('/get_notifications.php', [\App\Http\Controllers\LegacyNotificationController::class, 'notifications']);
