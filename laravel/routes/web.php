@@ -72,6 +72,13 @@ Route::get('/api/responses/{id}', function (\Illuminate\Http\Request $request, i
     return app(\App\Http\Controllers\LegacyLookupController::class)->responseDetails($request);
 })->whereNumber('id');
 Route::post('/submit_response.php', [\App\Http\Controllers\LegacySubmissionController::class, 'submitResponse']);
+Route::post('/api/public/forms/{id}/responses', function (\Illuminate\Http\Request $request, int $id) {
+    $payload = $request->json()->all();
+    $payload['form_id'] = $id;
+    $request->json()->replace($payload);
+
+    return app(\App\Http\Controllers\LegacySubmissionController::class)->submitResponse($request);
+})->whereNumber('id');
 Route::post('/save_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'saveForm']);
 Route::post('/update_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'updateForm']);
 Route::post('/delete_form.php', [\App\Http\Controllers\LegacyFormWriteController::class, 'deleteForm']);

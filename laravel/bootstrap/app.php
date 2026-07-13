@@ -22,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PROTO
                 | Request::HEADER_X_FORWARDED_PREFIX,
         );
-        $middleware->validateCsrfTokens(except: ['login.php', 'submit_response.php', 'test_reset_database.php']);
+        $middleware->validateCsrfTokens(except: ['login.php', 'submit_response.php', 'test_reset_database.php', 'api/public/forms/*/responses']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
