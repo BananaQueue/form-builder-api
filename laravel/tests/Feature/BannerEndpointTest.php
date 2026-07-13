@@ -194,6 +194,40 @@ class BannerEndpointTest extends TestCase
         $this->assertFileDoesNotExist(public_path('uploads/banner.png'));
     }
 
+    public function test_upload_banner_rejects_files_larger_than_two_megabytes(): void
+    {
+        $token = 'csrf-token';
+        $oversized = UploadedFile::fake()->create('banner.png', 3000, 'image/png');
+
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'username' => 'admin',
+            'user_id' => 5,
+            'role' => 'super_admin',
+        ])->withHeader('X-CSRF-TOKEN', $token)->post('/api/banner', ['banner' => $oversized]);
+
+        $response->assertOk()->assertJson(['success' => false, 'error' => 'PNG file must be 2 MB or smaller']);
+        $this->assertFileDoesNotExist(public_path('uploads/banner.png'));
+    }
+
+    public function test_upload_banner_rejects_non_png_content(): void
+    {
+        $token = 'csrf-token';
+        $notPng = UploadedFile::fake()->create('banner.png', 10, 'text/plain');
+
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'username' => 'admin',
+            'user_id' => 5,
+            'role' => 'super_admin',
+        ])->withHeader('X-CSRF-TOKEN', $token)->post('/api/banner', ['banner' => $notPng]);
+
+        $response->assertOk()->assertJson(['success' => false, 'error' => 'Only PNG files are allowed']);
+        $this->assertFileDoesNotExist(public_path('uploads/banner.png'));
+    }
+
     private function tinyPngUpload(): UploadedFile
     {
         $path = tempnam(sys_get_temp_dir(), 'banner_').'.png';
