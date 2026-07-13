@@ -51,6 +51,8 @@ Route::post('/api/notifications/{id}/read', function (\Illuminate\Http\Request $
 })->whereNumber('id');
 Route::post('/upload_banner.php', [\App\Http\Controllers\LegacyBannerController::class, 'upload']);
 Route::post('/remove_banner.php', [\App\Http\Controllers\LegacyBannerController::class, 'remove']);
+Route::post('/api/banner', [\App\Http\Controllers\LegacyBannerController::class, 'upload']);
+Route::delete('/api/banner', [\App\Http\Controllers\LegacyBannerController::class, 'remove']);
 Route::get('/get_users.php', [\App\Http\Controllers\LegacyUserController::class, 'users']);
 Route::post('/create_user_api.php', [\App\Http\Controllers\LegacyUserController::class, 'create']);
 Route::post('/delete_user.php', [\App\Http\Controllers\LegacyUserController::class, 'delete']);

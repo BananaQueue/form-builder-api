@@ -142,6 +142,58 @@ class BannerEndpointTest extends TestCase
         $this->assertFileDoesNotExist(public_path('uploads/banner.png'));
     }
 
+    public function test_native_banner_route_requires_authenticated_session(): void
+    {
+        $response = $this->post('/api/banner');
+
+        $response->assertStatus(401)->assertJson(['error' => 'Authentication required']);
+    }
+
+    public function test_native_banner_route_saves_png_and_audits(): void
+    {
+        $token = 'csrf-token';
+        $file = $this->tinyPngUpload();
+        $audit = \Mockery::mock();
+        DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
+        $audit->shouldReceive('insert')->once()->with(\Mockery::on(fn (array $row): bool => $row['action'] === 'BANNER_UPLOADED' && $row['entity_label'] === 'banner.png'))->andReturnTrue();
+
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'username' => 'admin',
+            'user_id' => 5,
+            'role' => 'super_admin',
+        ])->withHeader('X-CSRF-TOKEN', $token)->post('/api/banner', ['banner' => $file]);
+
+        $response->assertOk()->assertJson(['success' => true]);
+        $this->assertFileExists(public_path('uploads/banner.png'));
+    }
+
+    public function test_native_banner_delete_route_removes_file_and_audits(): void
+    {
+        $token = 'csrf-token';
+        $dir = public_path('uploads');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        file_put_contents(public_path('uploads/banner.png'), base64_decode($this->tinyPngBase64()));
+
+        $audit = \Mockery::mock();
+        DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
+        $audit->shouldReceive('insert')->once()->with(\Mockery::on(fn (array $row): bool => $row['action'] === 'BANNER_REMOVED' && $row['entity_label'] === 'banner.png'))->andReturnTrue();
+
+        $response = $this->withSession([
+            '_token' => $token,
+            'logged_in' => true,
+            'username' => 'admin',
+            'user_id' => 5,
+            'role' => 'super_admin',
+        ])->withHeader('X-CSRF-TOKEN', $token)->delete('/api/banner');
+
+        $response->assertOk()->assertJson(['success' => true]);
+        $this->assertFileDoesNotExist(public_path('uploads/banner.png'));
+    }
+
     private function tinyPngUpload(): UploadedFile
     {
         $path = tempnam(sys_get_temp_dir(), 'banner_').'.png';
