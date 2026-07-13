@@ -31,10 +31,6 @@ class LegacyLookupController extends Controller
 
     public function forms(Request $request): JsonResponse
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Not authenticated'], 401);
-        }
-
         $currentUserId = (int) $request->session()->get('user_id');
         $isSuperAdmin = $request->session()->get('role') === 'super_admin';
         $targetUserId = $currentUserId;
@@ -87,10 +83,6 @@ class LegacyLookupController extends Controller
 
     public function formDetails(Request $request): JsonResponse
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
         $formId = (int) $request->query('id', 0);
         if ($formId <= 0) {
             return response()->json(['error' => 'Form ID is required'], 400);
@@ -234,10 +226,6 @@ class LegacyLookupController extends Controller
 
     public function responses(Request $request): JsonResponse
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
         $formId = (int) $request->query('form_id', 0);
         if ($formId <= 0) {
             return response()->json(['error' => 'Form ID is required'], 400);
@@ -292,10 +280,6 @@ class LegacyLookupController extends Controller
 
     public function responseDetails(Request $request): JsonResponse
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
         $responseId = (int) $request->query('id', 0);
         if ($responseId <= 0) {
             return response()->json(['error' => 'Response ID is required'], 400);
@@ -357,10 +341,6 @@ class LegacyLookupController extends Controller
     }
     public function exportResponses(Request $request): JsonResponse|Response
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
         $formId = (int) $request->query('form_id', 0);
         if ($formId <= 0) {
             return response()->json(['error' => 'Form ID is required'], 400);
@@ -422,14 +402,14 @@ class LegacyLookupController extends Controller
             }
 
             $handle = fopen('php://temp', 'r+');
-            fputcsv($handle, array_merge(['Submitted At'], array_map(fn (array $question): mixed => $question['question_text'], $questions)));
+            fputcsv($handle, $this->neutralizeCsvRow(array_merge(['Submitted At'], array_map(fn (array $question): mixed => $question['question_text'], $questions))));
 
             foreach ($responses as $response) {
                 $row = [$response['submitted_at']];
                 foreach ($questions as $question) {
                     $row[] = $answersByResponseAndQuestion[(int) $response['id']][(int) $question['id']] ?? '';
                 }
-                fputcsv($handle, $row);
+                fputcsv($handle, $this->neutralizeCsvRow($row));
             }
 
             rewind($handle);
@@ -483,6 +463,7 @@ class LegacyLookupController extends Controller
                 'metadata' => json_encode(['owner_user_id' => isset($form->created_by) ? (int) $form->created_by : null], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'ip_address' => $request->ip(),
                 'user_agent' => substr((string) $request->userAgent(), 0, 255),
+                'created_at' => now(),
             ]);
         } catch (Throwable $exception) {
             report($exception);
@@ -491,5 +472,27 @@ class LegacyLookupController extends Controller
     private function rowToArray(object|array $row): array
     {
         return is_array($row) ? $row : get_object_vars($row);
+    }
+
+    /**
+     * Neutralize CSV formula injection. Answer text comes from untrusted public
+     * submitters; a value like "=HYPERLINK(...)" or "+cmd|..." would execute as a
+     * formula when the exported file is opened in Excel/Sheets. Prefixing any cell
+     * that begins with a formula trigger with a single quote forces the spreadsheet
+     * to treat it as literal text. See OWASP "CSV Injection".
+     */
+    private function neutralizeCsvRow(array $row): array
+    {
+        return array_map(fn ($cell): string => $this->neutralizeCsvCell($cell), $row);
+    }
+
+    private function neutralizeCsvCell(mixed $cell): string
+    {
+        $value = (string) ($cell ?? '');
+        if ($value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+            return "'".$value;
+        }
+
+        return $value;
     }
 }

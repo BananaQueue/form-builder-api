@@ -132,7 +132,7 @@ class CompatibilityEndpointTest extends TestCase
     {
         $response = $this->get('/get_forms.php');
 
-        $response->assertStatus(401)->assertJson(['error' => 'Not authenticated']);
+        $response->assertStatus(401)->assertJson(['error' => 'Authentication required']);
     }
 
     public function test_forms_matches_legacy_success_shape_for_current_user(): void

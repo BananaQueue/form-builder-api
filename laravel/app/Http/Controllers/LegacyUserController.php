@@ -11,11 +11,6 @@ class LegacyUserController extends Controller
 {
     public function users(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         try {
             $users = DB::select(<<<'SQL'
                 SELECT
@@ -41,11 +36,6 @@ class LegacyUserController extends Controller
 
     public function create(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $data = $request->json()->all();
         $username = trim((string) ($data['username'] ?? ''));
         $password = (string) ($data['password'] ?? '');
@@ -94,11 +84,6 @@ class LegacyUserController extends Controller
 
     public function delete(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $data = $request->json()->all();
         $userId = isset($data['user_id']) ? (int) $data['user_id'] : 0;
         $currentUserId = (int) $request->session()->get('user_id');
@@ -158,11 +143,6 @@ class LegacyUserController extends Controller
 
     public function changePassword(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $data = $request->json()->all();
         $userId = isset($data['user_id']) ? (int) $data['user_id'] : 0;
         $newPassword = (string) ($data['new_password'] ?? '');
@@ -232,11 +212,6 @@ class LegacyUserController extends Controller
 
     public function setEmail(Request $request, int $id): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $email = trim((string) ($request->json('email') ?? ''));
 
         if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -259,19 +234,6 @@ class LegacyUserController extends Controller
         ]);
 
         return response()->json(['success' => true, 'email' => $email]);
-    }
-
-    private function requireSuperAdmin(Request $request): ?JsonResponse
-    {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
-        if ($request->session()->get('role') !== 'super_admin') {
-            return response()->json(['error' => 'Super admin access required'], 403);
-        }
-
-        return null;
     }
 
     private function passwordPolicyError(string $password): ?string

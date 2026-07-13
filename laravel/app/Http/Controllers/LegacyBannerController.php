@@ -11,11 +11,6 @@ class LegacyBannerController extends Controller
 {
     public function upload(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         if (! $request->hasFile('banner')) {
             return response()->json(['success' => false, 'error' => 'No file uploaded']);
         }
@@ -68,11 +63,6 @@ class LegacyBannerController extends Controller
 
     public function remove(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $dest = public_path('uploads/banner.png');
         if (! file_exists($dest)) {
             return response()->json(['success' => false, 'error' => 'No banner to remove']);
@@ -88,19 +78,6 @@ class LegacyBannerController extends Controller
         ]);
 
         return response()->json(['success' => true]);
-    }
-
-    private function requireSuperAdmin(Request $request): ?JsonResponse
-    {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
-        if ($request->session()->get('role') !== 'super_admin') {
-            return response()->json(['error' => 'Super admin access required'], 403);
-        }
-
-        return null;
     }
 
     private function audit(Request $request, string $action, array $data): void

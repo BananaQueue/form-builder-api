@@ -20,11 +20,6 @@ class PasswordResetVerificationController extends Controller
     // Step 1: generate a code, email it to the TARGET account, hand back a token.
     public function requestCode(Request $request, int $id): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $target = DB::table('users')->select('id', 'username', 'role', 'email')->where('id', $id)->first();
 
         if (! $target) {
@@ -94,11 +89,6 @@ class PasswordResetVerificationController extends Controller
     // Step 2: check the code the admin typed matches the pending request.
     public function verifyCode(Request $request, int $id): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $token = (string) ($request->json('token') ?? '');
         $code = (string) ($request->json('code') ?? '');
 
@@ -124,19 +114,6 @@ class PasswordResetVerificationController extends Controller
         ]);
 
         return response()->json(['success' => true, 'token' => $token]);
-    }
-
-    private function requireSuperAdmin(Request $request): ?JsonResponse
-    {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
-        if ($request->session()->get('role') !== 'super_admin') {
-            return response()->json(['error' => 'Super admin access required'], 403);
-        }
-
-        return null;
     }
 
     private function maskEmail(string $email): string

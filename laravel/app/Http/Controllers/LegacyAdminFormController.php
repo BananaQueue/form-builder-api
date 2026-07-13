@@ -11,11 +11,6 @@ class LegacyAdminFormController extends Controller
 {
     public function allForms(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $perPage = max(1, (int) $request->query('per_page', 10));
         $page = max(1, (int) $request->query('page', 1));
         $offset = ($page - 1) * $perPage;
@@ -124,16 +119,4 @@ class LegacyAdminFormController extends Controller
         }
     }
 
-    private function requireSuperAdmin(Request $request): ?JsonResponse
-    {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
-        if ($request->session()->get('role') !== 'super_admin') {
-            return response()->json(['error' => 'Super admin access required'], 403);
-        }
-
-        return null;
-    }
 }

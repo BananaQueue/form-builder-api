@@ -11,11 +11,6 @@ class LegacyAuditLogController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $authError = $this->requireSuperAdmin($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $page = max(1, (int) $request->query('page', 1));
         $pageSize = min(100, max(10, (int) $request->query('page_size', 25)));
         $offset = ($page - 1) * $pageSize;
@@ -93,19 +88,6 @@ class LegacyAuditLogController extends Controller
 
             return response()->json(['success' => false, 'error' => 'Failed to retrieve audit logs'], 500);
         }
-    }
-
-    private function requireSuperAdmin(Request $request): ?JsonResponse
-    {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
-        if ($request->session()->get('role') !== 'super_admin') {
-            return response()->json(['error' => 'Super admin access required'], 403);
-        }
-
-        return null;
     }
 
     private function normalizeMetadata(array $logs): array

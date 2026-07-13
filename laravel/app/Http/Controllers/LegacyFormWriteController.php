@@ -11,10 +11,6 @@ class LegacyFormWriteController extends Controller
 {
     public function saveForm(Request $request): JsonResponse
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
         $data = $request->json()->all();
         if (! is_array($data) || ! isset($data['title'], $data['questions'])) {
             return response()->json(['error' => 'Invalid data provided'], 400);
@@ -68,10 +64,6 @@ class LegacyFormWriteController extends Controller
 
     public function updateForm(Request $request): JsonResponse
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
         $data = $request->json()->all();
         if (! is_array($data) || ! isset($data['form_id'], $data['title'], $data['questions'])) {
             return response()->json(['error' => 'Invalid data provided'], 400);
@@ -175,10 +167,6 @@ class LegacyFormWriteController extends Controller
 
     public function deleteForm(Request $request): JsonResponse
     {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
         $data = $request->json()->all();
         if (! is_array($data) || ! isset($data['form_id'])) {
             return response()->json(['error' => 'Form ID is required'], 400);
@@ -269,6 +257,7 @@ class LegacyFormWriteController extends Controller
         try {
             DB::table('audit_logs')->insert(['actor_user_id' => $request->session()->get('user_id'), 'actor_username' => $request->session()->get('username'), 'actor_role' => $request->session()->get('role'), 'action' => 'FORM_CREATED', 'entity_type' => 'form', 'entity_id' => (int) $formId, 'entity_label' => $title, 'metadata' => json_encode(['changes' => ['New form']]), 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now()]);
         } catch (Throwable $exception) {
+            report($exception);
         }
     }
     private function isExistingQuestionId(mixed $clientId, array $existingQuestionIds): bool
@@ -390,7 +379,7 @@ class LegacyFormWriteController extends Controller
 
     private function auditFormUpdated(Request $request, int $formId, string $title, array $changes = []): void
     {
-        try { DB::table('audit_logs')->insert(['actor_user_id' => $request->session()->get('user_id'), 'actor_username' => $request->session()->get('username'), 'actor_role' => $request->session()->get('role'), 'action' => 'FORM_UPDATED', 'entity_type' => 'form', 'entity_id' => $formId, 'entity_label' => $title, 'metadata' => json_encode(['changes' => count($changes) > 0 ? array_values(array_unique($changes)) : ['Updated form details']]), 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now()]); } catch (Throwable $exception) {}
+        try { DB::table('audit_logs')->insert(['actor_user_id' => $request->session()->get('user_id'), 'actor_username' => $request->session()->get('username'), 'actor_role' => $request->session()->get('role'), 'action' => 'FORM_UPDATED', 'entity_type' => 'form', 'entity_id' => $formId, 'entity_label' => $title, 'metadata' => json_encode(['changes' => count($changes) > 0 ? array_values(array_unique($changes)) : ['Updated form details']]), 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now()]); } catch (Throwable $exception) { report($exception); }
     }
 
     private function notifyOwnerIfAdminEdited(Request $request, object|array|null $ownerRow, int $formId, string $title): void
@@ -401,15 +390,15 @@ class LegacyFormWriteController extends Controller
             $recipientId = (int) ($owner['created_by'] ?? 0);
             if ($recipientId <= 0 || $recipientId === (int) $request->session()->get('user_id')) return;
             DB::table('notifications')->insert(['recipient_user_id' => $recipientId, 'type' => 'FORM_EDITED', 'form_id' => $formId, 'form_title' => $title, 'message' => "Your form '{$title}' was reviewed and edited by a Super Administrator.", 'admin_id' => $request->session()->get('user_id'), 'admin_name' => $request->session()->get('username'), 'created_at' => now()]);
-        } catch (Throwable $exception) {}
+        } catch (Throwable $exception) { report($exception); }
     }
     private function auditFormDeleted(Request $request, array $form, string $deletionReason, bool $isSuperAdmin): void
     {
-        try { DB::table('audit_logs')->insert(['actor_user_id' => $request->session()->get('user_id'), 'actor_username' => $request->session()->get('username'), 'actor_role' => $request->session()->get('role'), 'action' => 'FORM_DELETED', 'entity_type' => 'form', 'entity_id' => (int) $form['id'], 'entity_label' => $form['title'], 'metadata' => json_encode(['owner_user_id' => (int) ($form['created_by'] ?? 0), 'deletion_reason' => $deletionReason, 'super_admin_action' => $isSuperAdmin]), 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now()]); } catch (Throwable $exception) {}
+        try { DB::table('audit_logs')->insert(['actor_user_id' => $request->session()->get('user_id'), 'actor_username' => $request->session()->get('username'), 'actor_role' => $request->session()->get('role'), 'action' => 'FORM_DELETED', 'entity_type' => 'form', 'entity_id' => (int) $form['id'], 'entity_label' => $form['title'], 'metadata' => json_encode(['owner_user_id' => (int) ($form['created_by'] ?? 0), 'deletion_reason' => $deletionReason, 'super_admin_action' => $isSuperAdmin]), 'ip_address' => $request->ip(), 'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now()]); } catch (Throwable $exception) { report($exception); }
     }
 
     private function notifyOwnerFormDeleted(Request $request, array $form, string $deletionReason): void
     {
-        try { DB::table('notifications')->insert(['recipient_user_id' => (int) ($form['created_by'] ?? 0), 'type' => 'FORM_DELETED', 'form_id' => (int) $form['id'], 'form_title' => $form['title'], 'message' => "Your form '{$form['title']}' was removed by a Super Administrator.", 'deletion_reason' => $deletionReason, 'admin_id' => $request->session()->get('user_id'), 'admin_name' => $request->session()->get('username'), 'created_at' => now()]); } catch (Throwable $exception) {}
+        try { DB::table('notifications')->insert(['recipient_user_id' => (int) ($form['created_by'] ?? 0), 'type' => 'FORM_DELETED', 'form_id' => (int) $form['id'], 'form_title' => $form['title'], 'message' => "Your form '{$form['title']}' was removed by a Super Administrator.", 'deletion_reason' => $deletionReason, 'admin_id' => $request->session()->get('user_id'), 'admin_name' => $request->session()->get('username'), 'created_at' => now()]); } catch (Throwable $exception) { report($exception); }
     }
 }

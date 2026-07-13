@@ -13,11 +13,6 @@ class LegacyNotificationController extends Controller
 {
     public function notifications(Request $request): JsonResponse
     {
-        $authError = $this->requireAuth($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $userId = (int) $request->session()->get('user_id');
         if (! $this->notificationsTableExists()) {
             return response()->json(['success' => true, 'notifications' => [], 'unread_count' => 0, 'pending_count' => 0]);
@@ -60,11 +55,6 @@ class LegacyNotificationController extends Controller
 
     public function pending(Request $request): JsonResponse
     {
-        $authError = $this->requireAuth($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $userId = (int) $request->session()->get('user_id');
         if (! $this->notificationsTableExists()) {
             return response()->json(['success' => true, 'notifications' => [], 'pending_count' => 0]);
@@ -92,11 +82,6 @@ class LegacyNotificationController extends Controller
 
     public function acknowledge(Request $request): JsonResponse
     {
-        $authError = $this->requireAuth($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $notificationId = (int) ($request->json('notification_id') ?? 0);
         if ($notificationId <= 0) {
             return response()->json(['error' => 'notification_id is required'], 400);
@@ -126,11 +111,6 @@ class LegacyNotificationController extends Controller
 
     public function markRead(Request $request): JsonResponse
     {
-        $authError = $this->requireAuth($request);
-        if ($authError) {
-            return $authError;
-        }
-
         $notificationId = (int) ($request->json('notification_id') ?? 0);
         if ($notificationId <= 0) {
             return response()->json(['error' => 'notification_id is required'], 400);
@@ -156,15 +136,6 @@ class LegacyNotificationController extends Controller
 
             return response()->json(['error' => 'Failed to mark notification as read'], 500);
         }
-    }
-
-    private function requireAuth(Request $request): ?JsonResponse
-    {
-        if ($request->session()->get('logged_in') !== true) {
-            return response()->json(['error' => 'Authentication required'], 401);
-        }
-
-        return null;
     }
 
     private function notificationsTableExists(): bool
