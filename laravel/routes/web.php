@@ -38,6 +38,22 @@ Route::get('/get_users.php', [\App\Http\Controllers\LegacyUserController::class,
 Route::post('/create_user_api.php', [\App\Http\Controllers\LegacyUserController::class, 'create']);
 Route::post('/delete_user.php', [\App\Http\Controllers\LegacyUserController::class, 'delete']);
 Route::post('/change_password.php', [\App\Http\Controllers\LegacyUserController::class, 'changePassword']);
+Route::get('/api/users', [\App\Http\Controllers\LegacyUserController::class, 'users']);
+Route::post('/api/users', [\App\Http\Controllers\LegacyUserController::class, 'create']);
+Route::delete('/api/users/{id}', function (\Illuminate\Http\Request $request, int $id) {
+    $payload = $request->json()->all();
+    $payload['user_id'] = $id;
+    $request->json()->replace($payload);
+
+    return app(\App\Http\Controllers\LegacyUserController::class)->delete($request);
+})->whereNumber('id');
+Route::patch('/api/users/{id}/password', function (\Illuminate\Http\Request $request, int $id) {
+    $payload = $request->json()->all();
+    $payload['user_id'] = $id;
+    $request->json()->replace($payload);
+
+    return app(\App\Http\Controllers\LegacyUserController::class)->changePassword($request);
+})->whereNumber('id');
 Route::post('/users/{id}/password-reset-code', [\App\Http\Controllers\PasswordResetVerificationController::class, 'requestCode'])->whereNumber('id');
 Route::post('/users/{id}/password-reset-code/verify', [\App\Http\Controllers\PasswordResetVerificationController::class, 'verifyCode'])->whereNumber('id');
 Route::post('/users/{id}/email', [\App\Http\Controllers\LegacyUserController::class, 'setEmail'])->whereNumber('id');
