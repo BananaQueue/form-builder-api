@@ -33,6 +33,22 @@ Route::get('/get_notifications.php', [\App\Http\Controllers\LegacyNotificationCo
 Route::get('/get_pending_notifications.php', [\App\Http\Controllers\LegacyNotificationController::class, 'pending']);
 Route::post('/acknowledge_notification.php', [\App\Http\Controllers\LegacyNotificationController::class, 'acknowledge']);
 Route::post('/mark_notification_read.php', [\App\Http\Controllers\LegacyNotificationController::class, 'markRead']);
+Route::get('/api/notifications', [\App\Http\Controllers\LegacyNotificationController::class, 'notifications']);
+Route::get('/api/notifications/pending', [\App\Http\Controllers\LegacyNotificationController::class, 'pending']);
+Route::post('/api/notifications/{id}/acknowledge', function (\Illuminate\Http\Request $request, int $id) {
+    $payload = $request->json()->all();
+    $payload['notification_id'] = $id;
+    $request->json()->replace($payload);
+
+    return app(\App\Http\Controllers\LegacyNotificationController::class)->acknowledge($request);
+})->whereNumber('id');
+Route::post('/api/notifications/{id}/read', function (\Illuminate\Http\Request $request, int $id) {
+    $payload = $request->json()->all();
+    $payload['notification_id'] = $id;
+    $request->json()->replace($payload);
+
+    return app(\App\Http\Controllers\LegacyNotificationController::class)->markRead($request);
+})->whereNumber('id');
 Route::post('/upload_banner.php', [\App\Http\Controllers\LegacyBannerController::class, 'upload']);
 Route::post('/remove_banner.php', [\App\Http\Controllers\LegacyBannerController::class, 'remove']);
 Route::get('/get_users.php', [\App\Http\Controllers\LegacyUserController::class, 'users']);
