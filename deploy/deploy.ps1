@@ -225,6 +225,27 @@ Push-Location $relLaravel
 Pop-Location
 Ok "Config and view caches built"
 
+# --- Uploaded files must SURVIVE deploys --------------------------------
+# The app writes uploads to public_path('uploads') - i.e. INSIDE the release.
+# Left alone, every deploy would start with an empty folder and the uploaded
+# banner would vanish. So keep the real folder in shared\ and link it in.
+$sharedUploads  = Join-Path $sharedDir 'uploads'
+$releaseUploads = Join-Path $relLaravel 'public\uploads'
+New-Item -ItemType Directory -Force -Path $sharedUploads | Out-Null
+
+# First deploy: seed shared\uploads from whatever the release shipped with.
+if (Test-Path $releaseUploads) {
+    Get-ChildItem $releaseUploads -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $target = Join-Path $sharedUploads $_.Name
+        if (-not (Test-Path $target)) { Copy-Item $_.FullName $target }
+    }
+    Remove-Item $releaseUploads -Recurse -Force
+}
+cmd /c mklink /J "$releaseUploads" "$sharedUploads" | Out-Null
+if (-not (Test-Path $releaseUploads)) { Die "Could not link the shared uploads folder." }
+$uploadCount = (Get-ChildItem $sharedUploads -File -ErrorAction SilentlyContinue | Measure-Object).Count
+Ok "Uploads linked to shared folder ($uploadCount file(s) preserved across deploys)"
+
 # ==================================================================
 Step 6 "Smoke test (before switching any traffic)"
 # ==================================================================
