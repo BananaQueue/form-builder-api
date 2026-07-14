@@ -17,6 +17,13 @@
     Admin rights are NOT required.
 #>
 
+param(
+    # MySQL/MariaDB root password. XAMPP's default is empty, but this server
+    # has one set. It is only held in memory - never written or logged.
+    [string]$DbPassword = '',
+    [string]$DbUser     = 'root'
+)
+
 $ErrorActionPreference = 'Continue'
 
 function Write-Head($text) {
@@ -90,7 +97,12 @@ if ($phpExes.Count -eq 0) {
         Write-Output ""
         Write-Item "PHP executable" $php
         try {
-            $verLine = (& $php -r "echo PHP_VERSION;" 2>$null)
+            # -n skips php.ini. Without it, broken extension warnings are printed
+            # BEFORE the version and turn the result into an array (the bug that
+            # made this print "System.Object[]" last time).
+            $verRaw  = (& $php -n -r "echo PHP_VERSION;" 2>$null)
+            $verLine = (($verRaw | Out-String).Trim() -split "`r?`n" | Where-Object { $_ -match '^\d+\.\d+\.\d+' } | Select-Object -First 1)
+            if (-not $verLine) { $verLine = ($verRaw | Out-String).Trim() }
             Write-Item "PHP version" $verLine
             $m = [regex]::Match($verLine, '^(\d+)\.(\d+)\.(\d+)')
             if ($m.Success) {
@@ -190,16 +202,17 @@ if (-not $mysqlExe) {
 } else {
     Write-Item "mysql client" $mysqlExe
 
-    # XAMPP default is root with an empty password.
+    # Password is passed via MYSQL_PWD so it never appears in the process list.
+    if ($DbPassword -ne '') { $env:MYSQL_PWD = $DbPassword }
     function Invoke-Sql($sql) {
-        $out = & $mysqlExe "-uroot" "--batch" "--skip-column-names" "-e" $sql 2>&1
+        $out = & $mysqlExe "-u$DbUser" "--batch" "--skip-column-names" "-e" $sql 2>&1
         return $out
     }
 
     $ver = Invoke-Sql "SELECT VERSION();"
     if ($LASTEXITCODE -ne 0 -or ($ver -match 'Access denied')) {
-        Write-Item "DB connect (root/no pw)" "FAILED - root likely has a password"
-        Write-Output "  -> Re-run after setting: `$env:MYSQL_PWD='<password>'  (not stored anywhere)"
+        Write-Item "DB connect" "FAILED as '$DbUser'"
+        Write-Output "  -> Re-run passing the password:  -DbPassword '<password>'"
     } else {
         Write-Item "DB server version" ($ver | Select-Object -First 1)
 
