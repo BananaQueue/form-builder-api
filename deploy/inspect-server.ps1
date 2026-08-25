@@ -247,18 +247,27 @@ if (-not $mysqlExe) {
                 }
             }
 
-            # This is the table that actually gates deploy.ps1: it refuses to run
-            # `artisan migrate --force` unless this table exists (see deploy.ps1's
-            # pre-cutover guard). audit_logs/notifications/password_reset_codes
+            # deploy.ps1's pre-cutover guard checks two things before it will run
+            # `artisan migrate --force`, and both are reproduced here so this
+            # report can't give a false "should pass": (1) does a 'migrations'
+            # table exist at all, and (2) is the specific baseline migration
+            # actually recorded in it. audit_logs/notifications/password_reset_codes
             # above predate this whole plan and exist on the live pre-cutover
             # database too, so they say nothing about migration-tracking state.
             Write-Output ""
-            if ($tables -contains 'migrations') {
-                Write-Output ("    {0,-28} present" -f 'migrations')
-                Write-Output "    migrations table  PRESENT -> deploy.ps1's migration guard should pass (also verify the baseline row - see deploy.ps1)"
-            } else {
+            if (-not ($tables -contains 'migrations')) {
                 Write-Output ("    {0,-28} MISSING (migration not applied)" -f 'migrations')
                 Write-Output "    migrations table  ABSENT -> one-time manual cutover required, see DEPLOYMENT.md"
+            } else {
+                Write-Output ("    {0,-28} present" -f 'migrations')
+                $baselineRow = Invoke-Sql "SELECT COUNT(*) FROM ``form_builder``.migrations WHERE migration='2026_07_14_000000_create_form_builder_schema';"
+                if (([int]($baselineRow | Select-Object -First 1)) -gt 0) {
+                    Write-Output "    baseline migration row  PRESENT -> deploy.ps1's migration guard should pass"
+                } else {
+                    Write-Output "    baseline migration row  MISSING -> deploy.ps1 will still refuse to deploy"
+                    Write-Output "    (migrations table exists, but the baseline row isn't recorded in it - this is"
+                    Write-Output "     cutover step 1 done without step 2; see DEPLOYMENT.md's cutover procedure)"
+                }
             }
         }
     }
