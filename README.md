@@ -88,7 +88,7 @@ php artisan migrate
 
 ## Important Endpoints
 
-Laravel defines production routes in `laravel/routes/web.php`. Every endpoint is reached only through its native `/api/...` route — there are no `.php`-suffixed route aliases.
+Laravel defines production routes in `laravel/routes/web.php`. There are no `.php`-suffixed route aliases. Almost every route below is `/api`-prefixed; three Super Admin routes (listed under Super Admin) deliberately aren't — still native routes, still gated by the same `legacy.superadmin` middleware as everything else in that group.
 
 Authentication:
 
@@ -120,6 +120,9 @@ Super Admin:
 - `PATCH /api/users/{id}/password`
 - `DELETE /api/users/{id}`
 - `GET /api/admin/audit-logs`
+- `POST /users/{id}/password-reset-code` — not `/api`-prefixed
+- `POST /users/{id}/password-reset-code/verify` — not `/api`-prefixed
+- `POST /users/{id}/email` — not `/api`-prefixed
 
 Settings:
 
@@ -155,7 +158,7 @@ These routes exist for E2E tests only:
 - `test_audit_logs.php`
 - `test_last_reset_code.php`
 
-They're guarded by `FB_ALLOW_TEST_GUARD=1` (or the `testing` environment) plus a database-name check (the target DB name must end in `test`) plus, for the reset route, a bearer token (`FB_TEST_RESET_TOKEN`). Never set `FB_ALLOW_TEST_GUARD` in production.
+They're guarded by `FB_ALLOW_TEST_GUARD=1` (or the `testing` environment) plus a database-name check (the target DB name must end in `test`). The reset and audit-log-lookup routes additionally require a token in the `X-E2E-Reset-Token` header (`FB_TEST_RESET_TOKEN`). Never set `FB_ALLOW_TEST_GUARD` in production.
 
 ## Laravel Tests
 
@@ -187,7 +190,9 @@ Audited events include:
 - `USER_LOGOUT`
 - `USER_CREATED`
 - `USER_PASSWORD_CHANGED`
+- `USER_EMAIL_UPDATED`
 - `USER_DELETED`
+- `PASSWORD_RESET_CODE_REQUESTED`
 - `FORM_CREATED`
 - `FORM_UPDATED`
 - `FORM_DELETED`

@@ -75,7 +75,9 @@ Laravel serves normal React routes such as `/` and `/form/{code}` from `public/a
 
 ## API Routes
 
-Every endpoint is reached through its Laravel-native `/api/...` route only — there are no `.php`-suffixed compatibility aliases left. Controllers are still named `Legacy*Controller` because they carry over the raw-SQL implementation style from the pre-Laravel PHP app, not because of how they're routed. The four `test_*.php` routes that remain (`test_database_guard.php`, `test_reset_database.php`, `test_audit_logs.php`, `test_last_reset_code.php`) are guarded E2E test helpers with no native counterpart, not legacy aliases.
+Every production endpoint is a native Laravel route — there are no `.php`-suffixed compatibility aliases left. Controllers are still named `Legacy*Controller` because they carry over the raw-SQL implementation style from the pre-Laravel PHP app, not because of how they're routed. Almost every production route is `/api`-prefixed; three Super Admin routes deliberately aren't (`/users/{id}/password-reset-code`, its `/verify`, and `/email`) — still native routes, still gated by the same middleware as everything else, just a naming inconsistency.
+
+Separately, four `test_*.php` routes remain (`test_database_guard.php`, `test_reset_database.php`, `test_audit_logs.php`, `test_last_reset_code.php`) — these are guarded E2E test helpers that never had a native counterpart to alias, not leftover compatibility routes.
 
 ## Configuration
 

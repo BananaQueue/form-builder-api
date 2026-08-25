@@ -61,6 +61,12 @@ return [
     |
     */
 
+    // Unused stock config: the app never calls Auth::/Password:: or resolves
+    // this provider (auth is 100% raw-SQL session checks in the legacy.auth /
+    // legacy.superadmin middleware). User::class below resolves to a plain
+    // string at compile time, so this stays inert even though app/Models/User.php
+    // was deleted - but the first real use of native Laravel auth WILL fail
+    // with a missing-class error, since there's no Eloquent User model anymore.
     'providers' => [
         'users' => [
             'driver' => 'eloquent',
