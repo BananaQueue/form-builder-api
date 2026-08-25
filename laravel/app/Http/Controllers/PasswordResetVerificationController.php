@@ -16,6 +16,7 @@ class PasswordResetVerificationController extends Controller
 {
     private const CODE_TTL_MINUTES = 10;
     private const MAX_REQUESTS_PER_HOUR = 5;
+    private const MAX_VERIFY_ATTEMPTS = 5;
 
     // Step 1: generate a code, email it to the TARGET account, hand back a token.
     public function requestCode(Request $request, int $id): JsonResponse
@@ -96,6 +97,14 @@ class PasswordResetVerificationController extends Controller
             return response()->json(['success' => false, 'error' => 'Token and code are required'], 400);
         }
 
+        // Guessing rate limit: caps how many codes can be tried against a
+        // single pending token before the admin has to request a fresh one.
+        $rateLimitKey = $this->verifyRateLimitKey($id, $token);
+        $attempts = (int) Cache::get($rateLimitKey, 0);
+        if ($attempts >= self::MAX_VERIFY_ATTEMPTS) {
+            return response()->json(['success' => false, 'error' => 'Too many incorrect attempts. Request a new code.'], 429);
+        }
+
         $row = DB::table('password_reset_codes')
             ->where('user_id', $id)
             ->where('token', $token)
@@ -105,6 +114,8 @@ class PasswordResetVerificationController extends Controller
             ->first();
 
         if (! $row || ! Hash::check($code, $row->code_hash)) {
+            Cache::put($rateLimitKey, $attempts + 1, now()->addMinutes(self::CODE_TTL_MINUTES));
+
             return response()->json(['success' => false, 'error' => 'Invalid or expired code'], 400);
         }
 
@@ -113,7 +124,14 @@ class PasswordResetVerificationController extends Controller
             'updated_at' => now(),
         ]);
 
+        Cache::forget($rateLimitKey);
+
         return response()->json(['success' => true, 'token' => $token]);
+    }
+
+    private function verifyRateLimitKey(int $userId, string $token): string
+    {
+        return 'password_reset_code_verify:'.$userId.':'.hash('sha256', $token);
     }
 
     private function maskEmail(string $email): string
