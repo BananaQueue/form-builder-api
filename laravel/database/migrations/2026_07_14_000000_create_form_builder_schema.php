@@ -8,7 +8,9 @@ use Illuminate\Support\Facades\Schema;
 // Recreates the legacy MariaDB schema exactly: signed int(11) ids,
 // utf8mb4 / utf8mb4_general_ci, current_timestamp() defaults, original
 // index and foreign-key names. Verified byte-for-byte by the schema-diff
-// CI job against src/form_builder.sql.
+// CI job against src/form_builder.sql - see form-builder-app commit
+// c05e0e0, where both the CI job and the dump it compared against were
+// retired once this migration was the confirmed source of truth.
 return new class extends Migration
 {
     public function up(): void

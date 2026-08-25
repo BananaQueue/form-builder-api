@@ -166,8 +166,13 @@ $sharedEnv = Join-Path $sharedDir '.env'
 
 if (-not (Test-Path $sharedEnv)) {
     Copy-Item (Join-Path $relLaravel '.env.production.example') $sharedEnv
-    Warn "Created a NEW .env at: $sharedEnv"
-    Warn "You MUST edit it (APP_URL, DB and MAIL credentials) before going live."
+    Die @"
+Created a NEW .env at: $sharedEnv
+         It still has PLACEHOLDER values (APP_URL, DB and MAIL credentials).
+         Edit it now with the real production values, then re-run this script.
+         Nothing was activated - the release folder $releaseDir was built but
+         is not live, and your Step 2 backup is already safe on disk.
+"@
 }
 Copy-Item $sharedEnv (Join-Path $relLaravel '.env') -Force
 
@@ -184,10 +189,63 @@ if ($envText -match '(?m)^APP_KEY=\s*$') {
     Ok "APP_KEY present (reused from shared .env)"
 }
 
+# artisan migrate is only safe to run unattended once the target database is
+# already Laravel-tracked (has a 'migrations' table). On a database that
+# predates this migration - the live, pre-cutover production database - the
+# baseline migration's unconditional CREATE TABLEs would collide with tables
+# that already exist. Migrating that database in place is a deliberate,
+# one-time MANUAL step (see docs/DEPLOYMENT.md's "existing production
+# database" section) - this script does not do it automatically.
+Info "Checking migration tracking state..."
+$migrationsTableCount = & $mysql "-u$DbUser" --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DbName' AND TABLE_NAME='migrations';"
+if ([int]$migrationsTableCount -eq 0) {
+    Die @"
+Database '$DbName' has no 'migrations' table yet.
+         This looks like the pre-Laravel production database, not yet cut
+         over to Laravel-tracked migrations. Running 'artisan migrate --force'
+         here would either fail (CREATE TABLE colliding with tables that
+         already exist) or - if the tables happened not to collide - would
+         not reflect a verified baseline.
+
+         Cutting an existing live database over to Laravel migration tracking
+         is a deliberate, ONE-TIME, MANUAL step, not something this script
+         does for you. See "For the existing production database (one time,
+         at cutover)" in form-builder-app/docs/DEPLOYMENT.md for the exact
+         procedure (php artisan migrate:install, then recording the baseline
+         migration as already applied - only after confirming the live
+         schema genuinely matches what the migration would have created).
+
+         Do that once, by hand, then re-run this script: it will detect the
+         'migrations' table and proceed normally on this and all future
+         deploys. (Your Step 2 backup is already safe on disk.)
+"@
+}
+Ok "'migrations' tracking table present - safe to run artisan migrate"
+
+# Sanity-check the release's DB_DATABASE matches -DbName. The backup and the
+# migrations-table check above ran against -DbName/-DbUser/-DbPassword directly
+# via mysql; artisan migrate below reads its own credentials from this .env.
+# The two are meant to describe the same database - if .env was hand-edited
+# to point somewhere else, they'd silently disagree.
+if ($envText -match '(?m)^DB_DATABASE=(.*)$' -and $Matches[1].Trim() -ne $DbName) {
+    Warn "DB_DATABASE in .env ('$($Matches[1].Trim())') does not match -DbName ('$DbName')."
+    Warn "The backup and migration-tracking check above ran against '$DbName'; artisan will use '$($Matches[1].Trim())'."
+}
+
 Info "Applying database migrations..."
 Push-Location $relLaravel
 & $php artisan migrate --force
-if ($LASTEXITCODE -ne 0) { Pop-Location; Die "artisan migrate failed. Restore from $backupFile." }
+if ($LASTEXITCODE -ne 0) {
+    Pop-Location
+    Die @"
+artisan migrate failed. Before restoring anything, check:
+         1. Does the 'migrations' table's recorded state actually match what
+            is in the database (a previous deploy left things half-applied)?
+         2. Are the DB credentials in $sharedEnv correct - does DB_DATABASE
+            really point at '$DbName'?
+         If neither explains it, restore from $backupFile.
+"@
+}
 Pop-Location
 Ok "Migrations applied (tracked in the migrations table)"
 
