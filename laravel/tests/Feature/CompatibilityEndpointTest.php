@@ -16,51 +16,6 @@ class CompatibilityEndpointTest extends TestCase
         $response->assertOk()->assertJson(['ok' => true, 'app' => 'Form Builder Laravel', 'backend' => 'laravel']);
     }
 
-    public function test_check_session_matches_legacy_guest_shape(): void
-    {
-        $response = $this->get('/check_session.php');
-
-        $response->assertOk()->assertJson(['logged_in' => false]);
-    }
-
-    public function test_check_session_matches_legacy_authenticated_shape(): void
-    {
-        $response = $this->withSession([
-            'logged_in' => true,
-            'username' => 'admin',
-            'user_id' => 1,
-            'role' => 'super_admin',
-        ])->get('/check_session.php');
-
-        $response->assertOk()
-            ->assertJson(['logged_in' => true, 'username' => 'admin', 'user_id' => 1, 'role' => 'super_admin'])
-            ->assertJsonStructure(['csrf_token']);
-    }
-
-    public function test_login_requires_username_and_password_without_csrf(): void
-    {
-        $response = $this->postJson('/login.php', []);
-
-        $response->assertStatus(400)->assertJson(['error' => 'Username and password are required']);
-    }
-
-    public function test_logout_matches_legacy_success_shape_and_clears_session(): void
-    {
-        $token = 'test-csrf-token';
-
-        $response = $this->withSession([
-            '_token' => $token,
-            'logged_in' => true,
-            'username' => 'admin',
-            'user_id' => 1,
-            'role' => 'super_admin',
-        ])->withHeader('X-CSRF-TOKEN', $token)->postJson('/logout.php');
-
-        $response->assertOk()->assertJson(['success' => true]);
-        $this->assertFalse(session()->has('logged_in'));
-        $this->assertFalse(session()->has('username'));
-    }
-
     public function test_native_session_route_matches_legacy_guest_shape(): void
     {
         $response = $this->get('/api/session');
@@ -117,7 +72,7 @@ class CompatibilityEndpointTest extends TestCase
             ['id' => 1, 'name' => 'General'],
         ]));
 
-        $response = $this->get('/get_categories.php');
+        $response = $this->get('/api/categories');
 
         $response->assertOk()->assertJson([
             'success' => true,
@@ -130,7 +85,7 @@ class CompatibilityEndpointTest extends TestCase
 
     public function test_forms_requires_authenticated_session(): void
     {
-        $response = $this->get('/get_forms.php');
+        $response = $this->get('/api/forms');
 
         $response->assertStatus(401)->assertJson(['error' => 'Authentication required']);
     }
@@ -156,7 +111,7 @@ class CompatibilityEndpointTest extends TestCase
             'username' => 'user1',
             'user_id' => 5,
             'role' => 'user',
-        ])->get('/get_forms.php');
+        ])->get('/api/forms');
 
         $response->assertOk()->assertJson([
             'success' => true,
@@ -182,20 +137,9 @@ class CompatibilityEndpointTest extends TestCase
             'username' => 'admin',
             'user_id' => 1,
             'role' => 'super_admin',
-        ])->get('/get_forms.php?user_id=7');
+        ])->get('/api/forms?user_id=7');
 
         $response->assertOk()->assertJson(['success' => true, 'forms' => []]);
-    }
-
-    public function test_form_details_requires_id(): void
-    {
-        $response = $this->withSession([
-            'logged_in' => true,
-            'user_id' => 5,
-            'role' => 'user',
-        ])->get('/get_form_details.php');
-
-        $response->assertStatus(400)->assertJson(['error' => 'Form ID is required']);
     }
 
     public function test_form_details_blocks_non_owner(): void
@@ -220,7 +164,7 @@ class CompatibilityEndpointTest extends TestCase
             'logged_in' => true,
             'user_id' => 5,
             'role' => 'user',
-        ])->get('/get_form_details.php?id=10');
+        ])->get('/api/forms/10');
 
         $response->assertStatus(403)->assertJson(['error' => 'You can only view your own forms']);
     }
@@ -268,7 +212,7 @@ class CompatibilityEndpointTest extends TestCase
             'logged_in' => true,
             'user_id' => 5,
             'role' => 'user',
-        ])->get('/get_form_details.php?id=10');
+        ])->get('/api/forms/10');
 
         $response->assertOk()->assertJson([
             'success' => true,

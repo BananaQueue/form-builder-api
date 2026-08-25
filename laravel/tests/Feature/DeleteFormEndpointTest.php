@@ -9,17 +9,8 @@ class DeleteFormEndpointTest extends TestCase
 {
     public function test_delete_form_requires_authenticated_session(): void
     {
-        $response = $this->postJson('/delete_form.php', []);
+        $response = $this->deleteJson('/api/forms/1');
         $response->assertStatus(401)->assertJson(['error' => 'Authentication required']);
-    }
-
-    public function test_delete_form_requires_form_id(): void
-    {
-        $token = 'csrf-token';
-        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5])
-            ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/delete_form.php', []);
-        $response->assertStatus(400)->assertJson(['error' => 'Form ID is required']);
     }
 
     public function test_delete_form_returns_not_found(): void
@@ -31,7 +22,7 @@ class DeleteFormEndpointTest extends TestCase
         });
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'role' => 'user'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/delete_form.php', ['form_id' => 10]);
+            ->deleteJson('/api/forms/10');
         $response->assertStatus(404)->assertJson(['error' => 'Form not found']);
     }
 
@@ -44,7 +35,7 @@ class DeleteFormEndpointTest extends TestCase
         });
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'role' => 'user'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/delete_form.php', ['form_id' => 10]);
+            ->deleteJson('/api/forms/10');
         $response->assertStatus(403)->assertJson(['error' => 'You can only delete your own forms']);
     }
 
@@ -57,25 +48,8 @@ class DeleteFormEndpointTest extends TestCase
         });
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'role' => 'super_admin'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/delete_form.php', ['form_id' => 10]);
+            ->deleteJson('/api/forms/10');
         $response->assertStatus(400)->assertJson(['error' => 'Deletion reason is required']);
-    }
-
-    public function test_delete_form_matches_legacy_success_shape(): void
-    {
-        $token = 'csrf-token';
-        DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
-            DB::shouldReceive('select')->once()->with('SELECT id, title, created_by FROM forms WHERE id = ?', [10])->andReturn([(object) ['id' => 10, 'title' => 'Mine', 'created_by' => 5]]);
-            DB::shouldReceive('delete')->once()->with('DELETE FROM forms WHERE id = ?', [10])->andReturn(1);
-            $audit = \Mockery::mock();
-            DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
-            $audit->shouldReceive('insert')->once()->with(\Mockery::type('array'))->andReturnTrue();
-            return $callback();
-        });
-        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'user1', 'role' => 'user'])
-            ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/delete_form.php', ['form_id' => 10]);
-        $response->assertOk()->assertJson(['success' => true, 'message' => 'Form deleted successfully']);
     }
 
     public function test_native_delete_form_route_injects_id_from_url(): void

@@ -107,56 +107,50 @@ Apply migrations in numeric order.
 
 ## Important Endpoints
 
-Laravel defines production routes in `laravel/routes/web.php`. It keeps the old `.php` names and also exposes native `/api/...` aliases for migrated read paths.
+Laravel defines production routes in `laravel/routes/web.php`. Every endpoint is reached only through its native `/api/...` route — the old `.php`-suffixed aliases have been removed.
 
 Authentication:
 
-- `login.php`
-- `logout.php`
-- `check_session.php`
+- `POST /api/login`
+- `POST /api/logout`
+- `GET /api/session`
 
 Forms:
 
-- `save_form.php`
-- `update_form.php`
-- `delete_form.php`
-- `get_forms.php`
-- `get_all_forms.php`
-- `get_form_details.php`
-- `get_form_by_code.php`
+- `POST /api/forms`
+- `PUT /api/forms/{id}`
+- `DELETE /api/forms/{id}`
 - `GET /api/forms`
+- `GET /api/admin/forms`
 - `GET /api/forms/{id}`
 - `GET /api/public/forms/{code}`
 
 Responses:
 
-- `submit_response.php`
-- `get_responses.php`
-- `get_response_details.php`
-- `export_responses.php`
+- `POST /api/public/forms/{id}/responses`
 - `GET /api/forms/{id}/responses`
 - `GET /api/responses/{id}`
 - `GET /api/forms/{id}/responses/export`
 
 Super Admin:
 
-- `get_users.php`
-- `create_user_api.php`
-- `change_password.php`
-- `delete_user.php`
-- `get_audit_logs.php`
+- `GET /api/users`
+- `POST /api/users`
+- `PATCH /api/users/{id}/password`
+- `DELETE /api/users/{id}`
+- `GET /api/admin/audit-logs`
 
 Settings:
 
-- `upload_banner.php`
-- `remove_banner.php`
+- `POST /api/banner`
+- `DELETE /api/banner`
 
 Notifications:
 
-- `get_notifications.php`
-- `get_pending_notifications.php`
-- `mark_notification_read.php`
-- `acknowledge_notification.php`
+- `GET /api/notifications`
+- `GET /api/notifications/pending`
+- `POST /api/notifications/{id}/read`
+- `POST /api/notifications/{id}/acknowledge`
 
 ## Initial Super Admin Bootstrap
 

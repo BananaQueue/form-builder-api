@@ -7,17 +7,6 @@ use Tests\TestCase;
 
 class AuditLogEndpointTest extends TestCase
 {
-    public function test_audit_logs_require_super_admin(): void
-    {
-        $response = $this->withSession([
-            'logged_in' => true,
-            'user_id' => 5,
-            'role' => 'user',
-        ])->get('/get_audit_logs.php');
-
-        $response->assertStatus(403)->assertJson(['error' => 'Super admin access required']);
-    }
-
     public function test_audit_logs_match_legacy_success_shape(): void
     {
         $params = ['FORM_UPDATED', '%admin%', '%admin%', '%admin%', '%admin%', '%admin%', '%admin%'];
@@ -58,7 +47,7 @@ class AuditLogEndpointTest extends TestCase
             'logged_in' => true,
             'user_id' => 1,
             'role' => 'super_admin',
-        ])->get('/get_audit_logs.php?action=FORM_UPDATED&search=admin');
+        ])->get('/api/admin/audit-logs?action=FORM_UPDATED&search=admin');
 
         $response->assertOk()->assertJson([
             'success' => true,
@@ -93,7 +82,7 @@ class AuditLogEndpointTest extends TestCase
             'logged_in' => true,
             'user_id' => 1,
             'role' => 'super_admin',
-        ])->get('/get_audit_logs.php?page=2&page_size=500');
+        ])->get('/api/admin/audit-logs?page=2&page_size=500');
 
         $response->assertOk()->assertJson([
             'success' => true,

@@ -9,7 +9,7 @@ class UpdateFormEndpointTest extends TestCase
 {
     public function test_update_form_requires_authenticated_session(): void
     {
-        $response = $this->postJson('/update_form.php', []);
+        $response = $this->putJson('/api/forms/1', []);
         $response->assertStatus(401)->assertJson(['error' => 'Authentication required']);
     }
 
@@ -18,7 +18,7 @@ class UpdateFormEndpointTest extends TestCase
         $token = 'csrf-token';
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/update_form.php', ['form_id' => 10]);
+            ->putJson('/api/forms/10', []);
         $response->assertStatus(400)->assertJson(['error' => 'Invalid data provided']);
     }
 
@@ -31,7 +31,7 @@ class UpdateFormEndpointTest extends TestCase
         });
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'role' => 'user'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/update_form.php', ['form_id' => 10, 'title' => 'Missing', 'questions' => []]);
+            ->putJson('/api/forms/10', ['title' => 'Missing', 'questions' => []]);
         $response->assertStatus(404)->assertJson(['error' => 'Form not found']);
     }
 
@@ -44,7 +44,7 @@ class UpdateFormEndpointTest extends TestCase
         });
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'role' => 'user'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/update_form.php', ['form_id' => 10, 'title' => 'Other', 'questions' => []]);
+            ->putJson('/api/forms/10', ['title' => 'Other', 'questions' => []]);
         $response->assertStatus(403)->assertJson(['error' => 'You can only edit your own forms']);
     }
 
@@ -132,7 +132,7 @@ class UpdateFormEndpointTest extends TestCase
 
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'user1', 'role' => 'user'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/update_form.php', ['form_id' => 10, 'title' => 'Updated', 'description' => 'Desc', 'category_id' => 1, 'step_mode' => 0, 'questions' => [['id' => 21, 'text' => 'Ready?', 'type' => 'multiple_choice', 'options' => ['Yes']]]]);
+            ->putJson('/api/forms/10', ['title' => 'Updated', 'description' => 'Desc', 'category_id' => 1, 'step_mode' => 0, 'questions' => [['id' => 21, 'text' => 'Ready?', 'type' => 'multiple_choice', 'options' => ['Yes']]]]);
 
         $response->assertOk()->assertJson(['success' => true, 'message' => 'Form updated successfully', 'form_id' => 10]);
     }

@@ -22,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PROTO
                 | Request::HEADER_X_FORWARDED_PREFIX,
         );
-        $middleware->validateCsrfTokens(except: ['login.php', 'submit_response.php', 'test_reset_database.php', 'api/public/forms/*/responses', 'api/login']);
+        $middleware->validateCsrfTokens(except: ['test_reset_database.php', 'api/public/forms/*/responses', 'api/login']);
 
         $middleware->alias([
             'legacy.auth' => \App\Http\Middleware\RequireLegacyAuth::class,

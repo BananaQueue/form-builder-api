@@ -9,7 +9,7 @@ class SaveFormEndpointTest extends TestCase
 {
     public function test_save_form_requires_authenticated_session(): void
     {
-        $response = $this->postJson('/save_form.php', []);
+        $response = $this->postJson('/api/forms', []);
         $response->assertStatus(401)->assertJson(['error' => 'Authentication required']);
     }
 
@@ -18,7 +18,7 @@ class SaveFormEndpointTest extends TestCase
         $token = 'csrf-token';
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/save_form.php', ['title' => 'Missing questions']);
+            ->postJson('/api/forms', ['title' => 'Missing questions']);
         $response->assertStatus(400)->assertJson(['error' => 'Invalid data provided']);
     }
 
@@ -45,7 +45,7 @@ class SaveFormEndpointTest extends TestCase
 
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'admin', 'role' => 'super_admin'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/save_form.php', [
+            ->postJson('/api/forms', [
                 'title' => 'Safety Check',
                 'description' => 'Daily',
                 'category_id' => 1,
@@ -88,7 +88,7 @@ class SaveFormEndpointTest extends TestCase
 
         $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'admin', 'role' => 'super_admin'])
             ->withHeader('X-CSRF-TOKEN', $token)
-            ->postJson('/save_form.php', [
+            ->postJson('/api/forms', [
                 'title' => 'Employee Details Form With A Very Long Name (Copy)',
                 'description' => 'Duplicated form',
                 'category_id' => 1,

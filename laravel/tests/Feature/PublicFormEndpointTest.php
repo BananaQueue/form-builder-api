@@ -7,13 +7,6 @@ use Tests\TestCase;
 
 class PublicFormEndpointTest extends TestCase
 {
-    public function test_public_form_lookup_requires_code(): void
-    {
-        $response = $this->get('/get_form_by_code.php');
-
-        $response->assertStatus(400)->assertJson(['error' => 'Form code is required']);
-    }
-
     public function test_public_form_lookup_matches_legacy_success_shape(): void
     {
         DB::shouldReceive('select')->once()->with(\Mockery::type('string'), ['ABC123'])->andReturn([
@@ -51,7 +44,7 @@ class PublicFormEndpointTest extends TestCase
             (object) ['option_text' => 'Closed', 'position' => 2],
         ]);
 
-        $response = $this->get('/get_form_by_code.php?code=ABC123');
+        $response = $this->get('/api/public/forms/ABC123');
 
         $response->assertOk()->assertJson([
             'success' => true,
@@ -88,7 +81,7 @@ class PublicFormEndpointTest extends TestCase
         ]);
         DB::shouldReceive('select')->once()->with(\Mockery::type('string'), [10])->andReturn([]);
 
-        $response = $this->get('/get_form_by_code.php?code=daily-form-ABC123');
+        $response = $this->get('/api/public/forms/daily-form-ABC123');
 
         $response->assertOk()->assertJson(['success' => true, 'form' => ['id' => 10, 'questions' => []]]);
     }

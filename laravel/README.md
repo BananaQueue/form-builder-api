@@ -2,8 +2,7 @@
 
 Primary backend for the Form Builder system. It serves both:
 
-- PHP-compatible API endpoints such as `/login.php`, `/save_form.php`, and `/get_form_by_code.php`
-- Laravel-native read aliases such as `/api/forms`, `/api/forms/{id}`, and `/api/public/forms/{code}`
+- The Laravel-native `/api/...` routes (e.g. `/api/forms`, `/api/forms/{id}`, `/api/public/forms/{code}`) — see `docs/laravel-endpoint-inventory.md` in `form-builder-app` for the full list
 - the compiled React frontend from `public/app`
 
 ## Requirements
@@ -74,31 +73,9 @@ Vite writes the compiled frontend into:
 
 Laravel serves normal React routes such as `/` and `/form/{code}` from `public/app/index.html`. File-like paths such as missing `.png`, `.js`, or `.css` files return `404` instead of the React shell.
 
-## API Compatibility
+## API Routes
 
-The Laravel routes intentionally keep the old endpoint names so the frontend migration stays low-risk. New read paths are moving to native `/api/...` route names, while compatibility routes remain active for write/admin groups and rollback:
-
-- `/check_session.php`
-- `/login.php`
-- `/logout.php`
-- `/save_form.php`
-- `/update_form.php`
-- `/delete_form.php`
-- `/get_forms.php`
-- `/get_form_details.php`
-- `/get_form_by_code.php`
-- `/submit_response.php`
-- `/get_responses.php`
-- `/get_response_details.php`
-- `/export_responses.php`
-- `/get_users.php`
-- `/create_user_api.php`
-- `/change_password.php`
-- `/delete_user.php`
-- `/get_audit_logs.php`
-- `/upload_banner.php`
-- `/remove_banner.php`
-- notification endpoints
+Every endpoint is reached through its Laravel-native `/api/...` route only — there are no `.php`-suffixed compatibility aliases left. Controllers are still named `Legacy*Controller` because they carry over the raw-SQL implementation style from the pre-Laravel PHP app, not because of how they're routed. The four `test_*.php` routes that remain (`test_database_guard.php`, `test_reset_database.php`, `test_audit_logs.php`, `test_last_reset_code.php`) are guarded E2E test helpers with no native counterpart, not legacy aliases.
 
 ## Configuration
 
