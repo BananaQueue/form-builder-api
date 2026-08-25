@@ -91,19 +91,16 @@ The React app is served from `laravel/public/app` after the frontend build runs.
 
 ## Database
 
-Fresh schema:
+Schema lives entirely in Laravel migrations:
 
 ```text
-../form-builder-app/src/form_builder.sql
+laravel/database/migrations/
 ```
 
-Incremental migrations:
-
-```text
-migrations/
+```powershell
+cd laravel
+php artisan migrate
 ```
-
-Apply migrations in numeric order.
 
 ## Important Endpoints
 

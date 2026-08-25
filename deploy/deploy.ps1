@@ -9,9 +9,10 @@
       * Refuses to run if PHP < 8.4.1 (the app cannot run on older PHP).
       * Takes a FULL database backup before touching anything. Aborts if
         the backup fails.
-      * Never writes into htdocs and never drops/alters your data.
-      * Database schema migrations are NOT applied unless you explicitly
-        pass -ApplyMigrations.
+      * Never writes into htdocs.
+      * Applies pending Laravel migrations automatically (`artisan migrate
+        --force`) after installing dependencies. Already-applied migrations
+        are skipped - Laravel tracks state in the `migrations` table.
 
     TYPICAL USE
       powershell -ExecutionPolicy Bypass -File deploy.ps1 `
@@ -35,11 +36,7 @@ param(
     [string]$DbUser     = 'root',
     [string]$DbPassword = '',
 
-    [string]$XamppRoot  = 'C:\xampp',
-
-    # Apply the numbered SQL migrations. OFF by default: applying them twice
-    # can error, and we cannot tell what production already has.
-    [switch]$ApplyMigrations
+    [string]$XamppRoot  = 'C:\xampp'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -135,37 +132,7 @@ if ($sizeMB -le 0) { Die "Backup file is empty. Refusing to deploy." }
 Ok "Backup written ($sizeMB MB). Keep this file - it is your rollback."
 
 # ==================================================================
-Step 3 "Check schema / migration state"
-# ==================================================================
-$expected = @('audit_logs', 'notifications', 'password_reset_codes')
-$missing = @()
-foreach ($t in $expected) {
-    $n = & $mysql "-u$DbUser" --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DbName' AND TABLE_NAME='$t';"
-    if ([int]$n -eq 0) { $missing += $t }
-}
-if ($missing.Count -eq 0) {
-    Ok "All expected tables present - schema looks current"
-} else {
-    Warn ("Missing tables: " + ($missing -join ', '))
-    if (-not $ApplyMigrations) {
-        Die @"
-The live database is missing tables the new app needs.
-         Re-run with -ApplyMigrations to apply the numbered SQL migrations
-         from $ApiSource\migrations in order.
-         (Your backup from Step 2 is already safe on disk.)
-"@
-    }
-    Info "Applying numbered migrations from $ApiSource\migrations ..."
-    Get-ChildItem (Join-Path $ApiSource 'migrations') -Filter '*.sql' | Sort-Object Name | ForEach-Object {
-        Info "  applying $($_.Name)"
-        Get-Content $_.FullName -Raw | & $mysql "-u$DbUser" $DbName
-        if ($LASTEXITCODE -ne 0) { Die "Migration $($_.Name) failed. Restore from $backupFile." }
-    }
-    Ok "Migrations applied"
-}
-
-# ==================================================================
-Step 4 "Build the release"
+Step 3 "Build the release"
 # ==================================================================
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 $relLaravel = Join-Path $releaseDir 'laravel'
@@ -192,7 +159,7 @@ if (-not (Test-Path "$relLaravel\public\app\index.html")) { Die "Frontend build 
 Ok "Frontend built into public\app"
 
 # ==================================================================
-Step 5 "Configure (.env) - shared across releases"
+Step 4 "Configure (.env) and apply migrations"
 # ==================================================================
 New-Item -ItemType Directory -Force -Path $sharedDir | Out-Null
 $sharedEnv = Join-Path $sharedDir '.env'
@@ -216,6 +183,13 @@ if ($envText -match '(?m)^APP_KEY=\s*$') {
 } else {
     Ok "APP_KEY present (reused from shared .env)"
 }
+
+Info "Applying database migrations..."
+Push-Location $relLaravel
+& $php artisan migrate --force
+if ($LASTEXITCODE -ne 0) { Pop-Location; Die "artisan migrate failed. Restore from $backupFile." }
+Pop-Location
+Ok "Migrations applied (tracked in the migrations table)"
 
 Push-Location $relLaravel
 & $php artisan config:cache | Out-Null
@@ -247,7 +221,7 @@ $uploadCount = (Get-ChildItem $sharedUploads -File -ErrorAction SilentlyContinue
 Ok "Uploads linked to shared folder ($uploadCount file(s) preserved across deploys)"
 
 # ==================================================================
-Step 6 "Smoke test (before switching any traffic)"
+Step 5 "Smoke test (before switching any traffic)"
 # ==================================================================
 Info "Booting the release on port 8899 to verify it responds..."
 $proc = Start-Process -FilePath $php -ArgumentList @('artisan','serve','--port=8899','--host=127.0.0.1') `
@@ -271,7 +245,7 @@ The new release did not return a healthy response.
 Ok "Health check passed - the new release boots and responds"
 
 # ==================================================================
-Step 7 "Activate this release"
+Step 6 "Activate this release"
 # ==================================================================
 $previous = $null
 if (Test-Path $currentLink) {
