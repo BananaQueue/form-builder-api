@@ -246,6 +246,20 @@ if (-not $mysqlExe) {
                     Write-Output ("    {0,-28} MISSING (migration not applied)" -f $t)
                 }
             }
+
+            # This is the table that actually gates deploy.ps1: it refuses to run
+            # `artisan migrate --force` unless this table exists (see deploy.ps1's
+            # pre-cutover guard). audit_logs/notifications/password_reset_codes
+            # above predate this whole plan and exist on the live pre-cutover
+            # database too, so they say nothing about migration-tracking state.
+            Write-Output ""
+            if ($tables -contains 'migrations') {
+                Write-Output ("    {0,-28} present" -f 'migrations')
+                Write-Output "    migrations table  PRESENT -> deploy.ps1's migration guard should pass (also verify the baseline row - see deploy.ps1)"
+            } else {
+                Write-Output ("    {0,-28} MISSING (migration not applied)" -f 'migrations')
+                Write-Output "    migrations table  ABSENT -> one-time manual cutover required, see DEPLOYMENT.md"
+            }
         }
     }
 }

@@ -11,8 +11,19 @@
         the backup fails.
       * Never writes into htdocs.
       * Applies pending Laravel migrations automatically (`artisan migrate
-        --force`) after installing dependencies. Already-applied migrations
+        --force`) after installing dependencies - but ONLY once the target
+        database is already Laravel-tracked. Already-applied migrations
         are skipped - Laravel tracks state in the `migrations` table.
+      * Has two hard-stops a first production deploy WILL hit and that
+        require manual action before re-running the script:
+          1. Shared .env has placeholder values (first run ever) - edit it,
+             then re-run.
+          2. The target database predates this plan's migrations (no
+             `migrations` table, or the table exists but the baseline row
+             is missing) - do the one-time manual cutover in
+             form-builder-app/docs/DEPLOYMENT.md, then re-run.
+        A real first deploy is expected to take 2-3 invocations of this
+        script, not one.
 
     TYPICAL USE
       powershell -ExecutionPolicy Bypass -File deploy.ps1 `
@@ -220,7 +231,36 @@ Database '$DbName' has no 'migrations' table yet.
          deploys. (Your Step 2 backup is already safe on disk.)
 "@
 }
-Ok "'migrations' tracking table present - safe to run artisan migrate"
+Ok "'migrations' tracking table present"
+
+# The table existing is not enough on its own: DEPLOYMENT.md's manual cutover
+# procedure has the operator do this in two separate steps (1. create the
+# table via `migrate:install`, 2. a manual INSERT for the baseline row). If an
+# operator does step 1 but stops before step 2, the table exists but nothing
+# in it says the baseline schema was actually verified against the live
+# database - proceeding here would let artisan migrate run CREATE TABLE users
+# straight into a collision with the tables that are already there.
+$baselineRowCount = & $mysql "-u$DbUser" --batch --skip-column-names -e "SELECT COUNT(*) FROM ``$DbName``.migrations WHERE migration='2026_07_14_000000_create_form_builder_schema';"
+if ([int]$baselineRowCount -eq 0) {
+    Die @"
+Database '$DbName' has a 'migrations' table, but the baseline row
+         ('2026_07_14_000000_create_form_builder_schema') is not recorded in
+         it. The migrations table existing is not enough by itself - it only
+         means 'php artisan migrate:install' was run.
+
+         You likely completed step 1 of the cutover (migrate:install) but not
+         step 2 (the manual INSERT recording the baseline migration as
+         already applied). Running 'artisan migrate --force' in this state
+         would try to CREATE TABLE users and collide with the tables that
+         already exist on this live database.
+
+         See "For the existing production database (one time, at cutover)"
+         in form-builder-app/docs/DEPLOYMENT.md - cutover step 3 is the
+         INSERT you still need to run. Do that, then re-run this script.
+         (Your Step 2 backup is already safe on disk.)
+"@
+}
+Ok "Baseline migration row present - safe to run artisan migrate"
 
 # Sanity-check the release's DB_DATABASE matches -DbName. The backup and the
 # migrations-table check above ran against -DbName/-DbUser/-DbPassword directly
