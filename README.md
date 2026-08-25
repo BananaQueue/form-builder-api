@@ -1,6 +1,6 @@
 # Form Builder Backend
 
-Backend workspace for the Form Builder system. The primary runtime is the Laravel app in `laravel/`, which serves both the compiled React frontend and the API routes. The root PHP endpoint files remain for compatibility, reference, and migration tests while the Laravel conversion continues.
+Backend workspace for the Form Builder system. The Laravel app in `laravel/` is the entire backend runtime — it serves the compiled React frontend and every API route. There are no standalone PHP endpoint files at the repo root anymore; the pre-Laravel PHP app was fully retired.
 
 ## Responsibilities
 
@@ -16,8 +16,8 @@ Backend workspace for the Form Builder system. The primary runtime is the Larave
 
 ## Requirements
 
-- PHP 8+
-- Laravel dependencies in `laravel/vendor`
+- PHP 8.4.1+ (the app itself targets `^8.3`, but `composer.lock` pins Symfony components that hard-require 8.4.1 — anything older won't install)
+- Composer dependencies installed in `laravel/vendor`
 - MariaDB/MySQL
 - A web server pointed at `laravel/public`, or `php artisan serve` for local development
 
@@ -43,32 +43,14 @@ DB_TIMEZONE
 SESSION_DRIVER
 ```
 
-Legacy root PHP database configuration is still loaded in `db.php` for compatibility workflows.
-
-Environment variables used by the legacy compatibility path and bootstrap scripts:
+A handful of `FB_*` env vars are read directly (not through `.env`'s normal `config()` layer, but via `env()` calls in specific commands/controllers):
 
 ```text
-FB_DB_HOST
-FB_DB_NAME
-FB_DB_USER
-FB_DB_PASS
-FB_ALLOW_TEST_GUARD
-FB_ALLOWED_ORIGINS
-FB_MIN_PASSWORD_LENGTH
-FB_BOOTSTRAP_ADMIN_USERNAME
-FB_BOOTSTRAP_ADMIN_PASSWORD
-```
-
-Optional legacy local override:
-
-```text
-db.local.php
-```
-
-Create it from:
-
-```text
-db.local.example.php
+FB_BOOTSTRAP_ADMIN_USERNAME   # first super admin's username, used by fb:bootstrap-super-admin
+FB_BOOTSTRAP_ADMIN_PASSWORD   # first super admin's password, used by fb:bootstrap-super-admin
+FB_MIN_PASSWORD_LENGTH        # password policy floor, defaults to 12 if unset
+FB_ALLOW_TEST_GUARD           # must be '1' to allow the test_*.php helper routes outside the testing env — never set in production
+FB_TEST_RESET_TOKEN           # bearer token the test_reset_database.php route checks; defaults to 'local-e2e-reset' if unset
 ```
 
 Do not commit production secrets.
@@ -91,7 +73,7 @@ The React app is served from `laravel/public/app` after the frontend build runs.
 
 ## Database
 
-Schema lives entirely in Laravel migrations:
+Schema lives entirely in one Laravel migration:
 
 ```text
 laravel/database/migrations/
@@ -102,9 +84,11 @@ cd laravel
 php artisan migrate
 ```
 
+`php artisan migrate` is safe against a fresh database only. Migrating the pre-existing production database is a separate, deliberate, manual one-time step — `deploy/deploy.ps1` refuses to run it automatically and points at the procedure documented in the sibling `form-builder-app` repo's `docs/DEPLOYMENT.md`.
+
 ## Important Endpoints
 
-Laravel defines production routes in `laravel/routes/web.php`. Every endpoint is reached only through its native `/api/...` route — the old `.php`-suffixed aliases have been removed.
+Laravel defines production routes in `laravel/routes/web.php`. Every endpoint is reached only through its native `/api/...` route — there are no `.php`-suffixed route aliases.
 
 Authentication:
 
@@ -151,25 +135,27 @@ Notifications:
 
 ## Initial Super Admin Bootstrap
 
-For a clean production database, create the first Super Admin from the server CLI only:
+For a clean database, create the first Super Admin from the server CLI only — this is an artisan command, not a standalone script:
 
 ```powershell
+cd laravel
 $env:FB_BOOTSTRAP_ADMIN_USERNAME="admin"
 $env:FB_BOOTSTRAP_ADMIN_PASSWORD="Use-A-Strong-Unique-Password-123"
-php bootstrap_super_admin.php
+php artisan fb:bootstrap-super-admin
 ```
 
-The script refuses web requests, enforces the server password policy, and aborts if any Super Admin already exists.
+The username/password can also be passed as positional arguments instead of env vars. The command is CLI-only (never routed over HTTP), enforces the server password policy, and aborts if any Super Admin already exists.
 
 ## Test Endpoints
 
-These are for E2E tests only:
+These routes exist for E2E tests only:
 
 - `test_database_guard.php`
 - `test_reset_database.php`
 - `test_audit_logs.php`
+- `test_last_reset_code.php`
 
-They require `allow_test_guard => true` and must not be enabled in production.
+They're guarded by `FB_ALLOW_TEST_GUARD=1` (or the `testing` environment) plus a database-name check (the target DB name must end in `test`) plus, for the reset route, a bearer token (`FB_TEST_RESET_TOKEN`). Never set `FB_ALLOW_TEST_GUARD` in production.
 
 ## Laravel Tests
 
@@ -179,21 +165,21 @@ From `laravel/`:
 php artisan test
 ```
 
-Feature tests cover the Laravel compatibility controllers and route behavior.
+Feature tests cover every `Legacy*Controller` and route behavior. Most mock the `DB` facade and assert on the exact SQL issued, rather than hitting a real database.
 
 ## Security Notes
 
-- Mutating authenticated endpoints should call `fb_require_csrf()` or use the Laravel equivalent.
-- Super Admin endpoints should call `fb_require_super_admin()` or use the Laravel equivalent.
+- Mutating authenticated endpoints are CSRF-protected via Laravel's own `validateCsrfTokens` middleware (`bootstrap/app.php`), with a narrow, explicit exemption list for pre-session public endpoints.
+- Authenticated/Super Admin route groups are gated by the `legacy.auth`/`legacy.superadmin` middleware aliases, not per-method checks.
 - Public endpoints must validate all submitted data server-side.
 - File uploads must stay restricted to validated PNG files.
 - Production should use HTTPS.
-- Production should block or remove `test_*.php`.
+- Production should never set `FB_ALLOW_TEST_GUARD`.
 - Production should point the web root at `laravel/public`, not at the repository root.
 
 ## Audit Logs
 
-Audit logging is handled by `audit_helpers.php` and the Laravel compatibility controllers.
+Audit logging is handled inline in each `Legacy*Controller` (an `audit()` helper method per controller, writing to the `audit_logs` table) — there's no shared helper file.
 
 Audited events include:
 
