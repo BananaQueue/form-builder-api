@@ -218,6 +218,22 @@ class LegacyUserController extends Controller
             return response()->json(['success' => false, 'error' => 'A valid email address is required'], 400);
         }
 
+        $target = DB::table('users')->select('id', 'role', 'email')->where('id', $id)->first();
+        if (! $target) {
+            return response()->json(['success' => false, 'error' => 'User not found'], 404);
+        }
+
+        // A Super Admin's recovery email is the whole trust anchor for the
+        // password-reset-code flow: whoever controls it can take over that
+        // account. Once it's set, only the account owner may change it -
+        // another Super Admin repointing it would let them silently receive
+        // the reset code and hijack the account. Setting it the first time
+        // (bootstrap, before the owner has configured one) is still allowed.
+        $actingUserId = (int) $request->session()->get('user_id');
+        if ($target->role === 'super_admin' && (int) $target->id !== $actingUserId && ! empty($target->email)) {
+            return response()->json(['success' => false, 'error' => 'Only the account owner can change an already-configured Super Admin recovery email'], 403);
+        }
+
         $existing = DB::table('users')->where('email', $email)->where('id', '!=', $id)->first();
         if ($existing) {
             return response()->json(['success' => false, 'error' => 'That email is already used by another account'], 409);
@@ -231,6 +247,7 @@ class LegacyUserController extends Controller
         $this->audit($request, 'USER_EMAIL_UPDATED', [
             'entity_type' => 'user',
             'entity_id' => $id,
+            'metadata' => ['old_email' => $target->email, 'new_email' => $email],
         ]);
 
         return response()->json(['success' => true, 'email' => $email]);
