@@ -85,4 +85,19 @@ class PublicFormEndpointTest extends TestCase
 
         $response->assertOk()->assertJson(['success' => true, 'form' => ['id' => 10, 'questions' => []]]);
     }
+
+    public function test_public_form_lookup_does_not_fall_back_to_wildcard_match(): void
+    {
+        // Regression test: a code that reduces to a bare '%' after the slug split
+        // used to bind a LIKE query as "%-%", matching every form_code in the
+        // table (all shaped "slug-code") and disclosing an arbitrary form with
+        // no valid code. Only the two exact-match lookups should ever run.
+        DB::shouldReceive('select')->once()->with(\Mockery::type('string'), ['some-%'])->andReturn([]);
+        DB::shouldReceive('select')->once()->with(\Mockery::type('string'), ['%'])->andReturn([]);
+        DB::shouldReceive('select')->never()->with(\Mockery::type('string'), ['%-%']);
+
+        $response = $this->get('/api/public/forms/some-%25');
+
+        $response->assertStatus(404)->assertJson(['error' => 'Form not found']);
+    }
 }

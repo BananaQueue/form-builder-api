@@ -39,6 +39,19 @@ class DeleteFormEndpointTest extends TestCase
         $response->assertStatus(403)->assertJson(['error' => 'You can only delete your own forms']);
     }
 
+    public function test_delete_form_blocks_non_owner_when_form_is_orphaned(): void
+    {
+        $token = 'csrf-token';
+        DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
+            DB::shouldReceive('select')->once()->with('SELECT id, title, created_by FROM forms WHERE id = ?', [10])->andReturn([(object) ['id' => 10, 'title' => 'Orphaned', 'created_by' => null]]);
+            return $callback();
+        });
+        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'role' => 'user'])
+            ->withHeader('X-CSRF-TOKEN', $token)
+            ->deleteJson('/api/forms/10');
+        $response->assertStatus(403)->assertJson(['error' => 'You can only delete your own forms']);
+    }
+
     public function test_delete_form_requires_reason_for_super_admin(): void
     {
         $token = 'csrf-token';

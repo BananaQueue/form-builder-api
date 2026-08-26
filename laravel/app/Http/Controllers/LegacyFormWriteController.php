@@ -189,7 +189,7 @@ class LegacyFormWriteController extends Controller
                 $formOwnerId = (int) ($form['created_by'] ?? 0);
                 $isOtherUsersForm = $formOwnerId > 0 && $formOwnerId !== $currentUserId;
 
-                if (! $isSuperAdmin && $isOtherUsersForm) {
+                if (! $isSuperAdmin && $formOwnerId !== $currentUserId) {
                     throw new \RuntimeException('FORM_FORBIDDEN_DELETE');
                 }
                 if ($isSuperAdmin && $deletionReason === '') {

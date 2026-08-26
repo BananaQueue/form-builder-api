@@ -445,9 +445,7 @@ class LegacyLookupController extends Controller
             }
         }
 
-        $forms = DB::select(str_replace('WHERE f.form_code = ?', 'WHERE f.form_code LIKE ?', $sql), ['%-'.$uniqueCodeCandidate]);
-
-        return $forms[0] ?? null;
+        return null;
     }
     private function auditResponseExport(Request $request, object $form): void
     {
