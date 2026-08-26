@@ -63,7 +63,7 @@ class LegacyUserController extends Controller
             DB::insert('INSERT INTO users (username, role, password_hash) VALUES (?, ?, ?)', [
                 $username,
                 $role,
-                password_hash($password, PASSWORD_BCRYPT),
+                password_hash($password, PASSWORD_BCRYPT, ['cost' => (int) env('BCRYPT_ROUNDS', 12)]),
             ]);
             $newUserId = (int) DB::getPdo()->lastInsertId();
 
@@ -180,7 +180,7 @@ class LegacyUserController extends Controller
 
         try {
             $updated = DB::update('UPDATE users SET password_hash = ? WHERE id = ?', [
-                password_hash($newPassword, PASSWORD_BCRYPT),
+                password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => (int) env('BCRYPT_ROUNDS', 12)]),
                 $userId,
             ]);
 

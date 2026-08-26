@@ -21,7 +21,8 @@ param(
     # MySQL/MariaDB root password. XAMPP's default is empty, but this server
     # has one set. It is only held in memory - never written or logged.
     [string]$DbPassword = '',
-    [string]$DbUser     = 'root'
+    [string]$DbUser     = 'root',
+    [string]$DbName     = 'form_builder'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -221,18 +222,18 @@ if (-not $mysqlExe) {
         $dbs = Invoke-Sql "SHOW DATABASES;"
         $dbs | ForEach-Object { Write-Output ("    - " + $_) }
 
-        $hasFb = $dbs -contains 'form_builder'
+        $hasFb = $dbs -contains $DbName
         Write-Output ""
         if (-not $hasFb) {
-            Write-Item "form_builder DB" "NOT FOUND"
+            Write-Item "$DbName DB" "NOT FOUND"
         } else {
-            Write-Item "form_builder DB" "FOUND"
+            Write-Item "$DbName DB" "FOUND"
             Write-Output ""
-            Write-Output "  Tables in form_builder (and row counts):"
-            $tables = Invoke-Sql "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='form_builder' ORDER BY TABLE_NAME;"
+            Write-Output "  Tables in $DbName (and row counts):"
+            $tables = Invoke-Sql "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DbName' ORDER BY TABLE_NAME;"
             foreach ($t in $tables) {
                 if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                $cnt = Invoke-Sql "SELECT COUNT(*) FROM ``form_builder``.``$t``;"
+                $cnt = Invoke-Sql "SELECT COUNT(*) FROM ``$DbName``.``$t``;"
                 Write-Output ("    {0,-28} {1} rows" -f $t, ($cnt | Select-Object -First 1))
             }
 
@@ -260,7 +261,7 @@ if (-not $mysqlExe) {
                 Write-Output "    migrations table  ABSENT -> one-time manual cutover required, see DEPLOYMENT.md"
             } else {
                 Write-Output ("    {0,-28} present" -f 'migrations')
-                $baselineRow = Invoke-Sql "SELECT COUNT(*) FROM ``form_builder``.migrations WHERE migration='2026_07_14_000000_create_form_builder_schema';"
+                $baselineRow = Invoke-Sql "SELECT COUNT(*) FROM ``$DbName``.migrations WHERE migration='2026_07_14_000000_create_form_builder_schema';"
                 if (([int]($baselineRow | Select-Object -First 1)) -gt 0) {
                     Write-Output "    baseline migration row  PRESENT -> deploy.ps1's migration guard should pass"
                 } else {

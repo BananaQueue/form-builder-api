@@ -51,7 +51,7 @@ class BootstrapSuperAdmin extends Command
 
                 DB::insert("INSERT INTO users (username, role, password_hash) VALUES (?, 'super_admin', ?)", [
                     $username,
-                    password_hash($password, PASSWORD_BCRYPT),
+                    password_hash($password, PASSWORD_BCRYPT, ['cost' => (int) env('BCRYPT_ROUNDS', 12)]),
                 ]);
 
                 return null;
