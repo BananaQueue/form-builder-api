@@ -148,7 +148,15 @@ Step 3 "Build the release"
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 $relLaravel = Join-Path $releaseDir 'laravel'
 Info "Copying application into $relLaravel"
-Copy-Item $laravelSrc -Destination $relLaravel -Recurse -Force -Exclude @('node_modules', 'vendor')
+# Copy-Item's -Exclude only takes effect when -Path itself contains a
+# wildcard, and even then it does not reliably filter nested directories
+# during -Recurse - it silently copied vendor/, node_modules/, and the
+# developer's own .env (real local DB credentials) into every release.
+# robocopy's /XD and /XF are the real thing. Default retry behavior
+# (1,000,000 retries, 30s apart) is meant for interactive use - /R and /W
+# keep an unattended run from hanging on a locked file.
+robocopy $laravelSrc $relLaravel /E /XD vendor node_modules .git /XF .env .env.testing /R:2 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) { Die "Copying application into $relLaravel failed (robocopy exit code $LASTEXITCODE)." }
 Ok "Application copied"
 
 Info "Installing PHP dependencies (production only)..."
