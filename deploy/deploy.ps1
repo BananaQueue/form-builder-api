@@ -375,9 +375,23 @@ $previous = $null
 if (Test-Path $currentLink) {
     $previous = (Get-Item $currentLink).Target
     cmd /c rmdir "$currentLink" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Die "Could not remove the old 'current' link at $currentLink (rmdir exit code $LASTEXITCODE). It may be locked - e.g. Apache holding a handle inside it. Stop it and re-run; nothing was switched."
+    }
 }
 cmd /c mklink /J "$currentLink" "$releaseDir" | Out-Null
-if (-not (Test-Path $currentLink)) { Die "Could not create the 'current' link." }
+if ($LASTEXITCODE -ne 0) {
+    Die "Could not create the 'current' junction (mklink exit code $LASTEXITCODE). Nothing was switched."
+}
+
+# Test-Path alone can't tell a freshly-made junction from a leftover
+# directory the two cmd calls above silently failed to touch - confirm the
+# junction actually resolves to the release we just built, not just that
+# SOMETHING exists at that path.
+$actualTarget = @((Get-Item $currentLink).Target)[0]
+if ($actualTarget.TrimEnd('\') -ne $releaseDir.TrimEnd('\')) {
+    Die "'current' does not point at the new release after activation (found '$actualTarget', expected '$releaseDir'). The live site is still serving the OLD release - do not treat this run as a successful deploy."
+}
 Ok "'current' now points at release $stamp"
 
 # ==================================================================
