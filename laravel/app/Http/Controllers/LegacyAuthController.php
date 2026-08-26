@@ -22,7 +22,10 @@ class LegacyAuthController extends Controller
             ]);
         }
 
-        return response()->json(['logged_in' => false]);
+        // A guest still has a real session (and therefore a real CSRF token) -
+        // the frontend needs it here so the login POST below can carry it,
+        // now that api/login is no longer CSRF-exempt.
+        return response()->json(['logged_in' => false, 'csrf_token' => csrf_token()]);
     }
 
     public function login(Request $request): JsonResponse

@@ -22,7 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PROTO
                 | Request::HEADER_X_FORWARDED_PREFIX,
         );
-        $middleware->validateCsrfTokens(except: ['test_reset_database.php', 'api/public/forms/*/responses', 'api/login']);
+        // api/login is deliberately NOT exempt: without CSRF protection here,
+        // a cross-site form could force a victim's browser to authenticate
+        // as the ATTACKER's account (login CSRF) - the frontend fetches a
+        // guest CSRF token from /api/session before rendering the login form.
+        $middleware->validateCsrfTokens(except: ['test_reset_database.php', 'api/public/forms/*/responses']);
 
         $middleware->alias([
             'legacy.auth' => \App\Http\Middleware\RequireLegacyAuth::class,
