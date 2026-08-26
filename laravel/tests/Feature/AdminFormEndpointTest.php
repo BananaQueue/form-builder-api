@@ -96,4 +96,26 @@ class AdminFormEndpointTest extends TestCase
             'pagination' => ['total' => 0, 'page' => 2, 'per_page' => 5, 'total_pages' => 0],
         ]);
     }
+
+    public function test_native_admin_forms_route_caps_per_page_at_100(): void
+    {
+        DB::shouldReceive('select')->once()->with(\Mockery::type('string'), [])->andReturn([
+            (object) ['total' => 0],
+        ]);
+        DB::shouldReceive('select')->once()->with(\Mockery::on(fn (string $sql): bool => str_contains($sql, 'LIMIT 100 OFFSET 0')), [])->andReturn([]);
+        DB::shouldReceive('select')->once()->with(\Mockery::type('string'))->andReturn([
+            (object) ['total_forms' => 0, 'total_users' => 0, 'total_responses' => 0],
+        ]);
+
+        $response = $this->withSession([
+            'logged_in' => true,
+            'user_id' => 1,
+            'role' => 'super_admin',
+        ])->get('/api/admin/forms?per_page=999999');
+
+        $response->assertOk()->assertJson([
+            'success' => true,
+            'pagination' => ['per_page' => 100],
+        ]);
+    }
 }

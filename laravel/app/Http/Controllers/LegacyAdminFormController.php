@@ -11,7 +11,7 @@ class LegacyAdminFormController extends Controller
 {
     public function allForms(Request $request): JsonResponse
     {
-        $perPage = max(1, (int) $request->query('per_page', 10));
+        $perPage = min(100, max(1, (int) $request->query('per_page', 10)));
         $page = max(1, (int) $request->query('page', 1));
         $offset = ($page - 1) * $perPage;
 
