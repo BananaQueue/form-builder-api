@@ -329,16 +329,34 @@ Ok "Uploads linked to shared folder ($uploadCount file(s) preserved across deplo
 # ==================================================================
 Step 5 "Smoke test (before switching any traffic)"
 # ==================================================================
-Info "Booting the release on port 8899 to verify it responds..."
-$proc = Start-Process -FilePath $php -ArgumentList @('artisan','serve','--port=8899','--host=127.0.0.1') `
+$smokeTestPort = 8899
+
+# A leftover listener on this port - most likely an orphaned smoke-test
+# server from a PREVIOUS run of this script - would make the check below
+# pass against old code without ever booting the new release. Refuse
+# rather than risk a false "healthy".
+if (Get-NetTCPConnection -LocalPort $smokeTestPort -State Listen -ErrorAction SilentlyContinue) {
+    Die "Port $smokeTestPort is already in use (a leftover smoke-test server from a previous deploy?). Free it and re-run - see 'Stop-Process' notes in this script's Step 5 comment."
+}
+
+Info "Booting the release on port $smokeTestPort to verify it responds..."
+$proc = Start-Process -FilePath $php -ArgumentList @('artisan','serve',"--port=$smokeTestPort",'--host=127.0.0.1') `
                       -WorkingDirectory $relLaravel -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 5
 $healthy = $false
 try {
-    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8899/_fb_laravel_health' -UseBasicParsing -TimeoutSec 10
+    $r = Invoke-WebRequest -Uri "http://127.0.0.1:$smokeTestPort/_fb_laravel_health" -UseBasicParsing -TimeoutSec 10
     if ($r.StatusCode -eq 200) { $healthy = $true }
 } catch { }
-if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+
+# `artisan serve` spawns PHP's actual built-in server as a SEPARATE child
+# process - Stop-Process on $proc.Id only kills the artisan wrapper and
+# leaves the real server (and the port) held indefinitely. taskkill /T
+# kills the whole process tree. Confirmed by reproduction: without /T,
+# the server process survives and keeps answering requests.
+if ($proc -and -not $proc.HasExited) {
+    & taskkill /PID $proc.Id /T /F 2>$null | Out-Null
+}
 
 if (-not $healthy) {
     Die @"
