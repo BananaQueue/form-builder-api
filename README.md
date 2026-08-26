@@ -50,7 +50,7 @@ FB_BOOTSTRAP_ADMIN_USERNAME   # first super admin's username, used by fb:bootstr
 FB_BOOTSTRAP_ADMIN_PASSWORD   # first super admin's password, used by fb:bootstrap-super-admin
 FB_MIN_PASSWORD_LENGTH        # password policy floor, defaults to 12 if unset
 FB_ALLOW_TEST_GUARD           # must be '1' to allow the test_*.php helper routes outside the testing env — never set in production
-FB_TEST_RESET_TOKEN           # bearer token the test_reset_database.php route checks; defaults to 'local-e2e-reset' if unset
+FB_TEST_RESET_TOKEN           # value required in the X-E2E-Reset-Token header on test_reset_database.php and test_audit_logs.php; defaults to 'local-e2e-reset' if unset
 ```
 
 Do not commit production secrets.
@@ -95,6 +95,7 @@ Authentication:
 - `POST /api/login`
 - `POST /api/logout`
 - `GET /api/session`
+- `GET /_fb_laravel_health` — unauthenticated, used by `deploy.ps1`'s smoke test
 
 Forms:
 
@@ -105,6 +106,7 @@ Forms:
 - `GET /api/admin/forms`
 - `GET /api/forms/{id}`
 - `GET /api/public/forms/{code}`
+- `GET /api/categories` — public, unauthenticated (used to populate the category dropdown)
 
 Responses:
 

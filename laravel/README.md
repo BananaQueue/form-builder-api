@@ -7,7 +7,7 @@ Primary backend for the Form Builder system. It serves both:
 
 ## Requirements
 
-- PHP 8.4+
+- PHP 8.4.1+ (`composer.lock` pins Symfony components that hard-require 8.4.1; anything older won't install)
 - Composer dependencies installed in this directory
 - MariaDB/MySQL with the `form_builder` schema
 - Node/npm in `../../form-builder-app` when rebuilding frontend assets
