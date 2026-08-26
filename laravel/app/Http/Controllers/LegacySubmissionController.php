@@ -13,11 +13,12 @@ class LegacySubmissionController extends Controller
     public function submitResponse(Request $request): JsonResponse
     {
         $data = $request->json()->all();
-        if (! is_array($data) || ! isset($data['form_id'], $data['answers']) || ! is_array($data['answers'])) {
+        if (! is_array($data) || ! isset($data['form_id'], $data['answers'], $data['form_code']) || ! is_array($data['answers'])) {
             return response()->json(['error' => 'Invalid data provided'], 400);
         }
 
         $formId = (int) $data['form_id'];
+        $formCode = trim((string) $data['form_code']);
         $answers = $data['answers'];
         $rateLimitKey = $formId.'|'.($request->ip() ?: 'unknown');
 
@@ -26,7 +27,20 @@ class LegacySubmissionController extends Controller
         }
 
         try {
-            if (! DB::select('SELECT id FROM forms WHERE id = ?', [$formId])) {
+            // The share code, not the numeric id, is the actual capability
+            // that makes a form "public" - reading a form already requires
+            // it (LegacyLookupController::publicFormByCode). Submitting used
+            // to accept only the id, which is a small sequential integer:
+            // anyone could walk id=1,2,3... and inject responses into every
+            // form in the system, including ones whose link was never
+            // shared. A form's share URL is rebuilt from its CURRENT title,
+            // while forms.form_code is fixed at creation - so if the title
+            // was ever edited, the URL's code only matches the stored
+            // form_code's suffix, not the whole string. Accept either, same
+            // as the read endpoint, so editing a title doesn't break
+            // existing links.
+            $formRow = DB::selectOne('SELECT form_code FROM forms WHERE id = ?', [$formId]);
+            if (! $formRow || ! $this->codeMatchesForm($formCode, $formRow->form_code)) {
                 return response()->json(['error' => 'Form not found'], 404);
             }
 
@@ -178,6 +192,28 @@ class LegacySubmissionController extends Controller
             $optionsByQuestionId[(int) $row['question_id']][] = $row['option_text'];
         }
         return $optionsByQuestionId;
+    }
+
+    private function codeMatchesForm(string $submittedCode, string $storedFormCode): bool
+    {
+        if ($submittedCode === '') {
+            return false;
+        }
+        if (hash_equals($storedFormCode, $submittedCode)) {
+            return true;
+        }
+        // forms.form_code is "slug-suffix", fixed at creation. The share
+        // URL's slug is rebuilt from the form's CURRENT title every time
+        // it's generated, so if the title was ever edited after creation,
+        // a freshly-built link carries a different slug but the same
+        // suffix. Compare suffixes rather than requiring an exact match, so
+        // editing a title doesn't retroactively break existing links.
+        $submittedParts = explode('-', $submittedCode);
+        $submittedSuffix = end($submittedParts);
+        $storedParts = explode('-', $storedFormCode);
+        $storedSuffix = end($storedParts);
+
+        return $submittedSuffix !== '' && hash_equals($storedSuffix, $submittedSuffix);
     }
 
     private function isRateLimited(string $key): bool
