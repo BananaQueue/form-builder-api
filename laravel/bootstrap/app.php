@@ -12,16 +12,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $trustedProxies = array_values(array_filter(array_map('trim', explode(',', env('TRUSTED_PROXIES', '127.0.0.1,::1')))));
-
-        $middleware->trustProxies(
-            at: $trustedProxies,
-            headers: Request::HEADER_X_FORWARDED_FOR
-                | Request::HEADER_X_FORWARDED_HOST
-                | Request::HEADER_X_FORWARDED_PORT
-                | Request::HEADER_X_FORWARDED_PROTO
-                | Request::HEADER_X_FORWARDED_PREFIX,
-        );
+        // TRUSTED_PROXIES is NOT read here: this closure runs via
+        // afterResolving(Kernel::class), which fires the moment
+        // bootstrap/app.php resolves the kernel - BEFORE Laravel's own
+        // LoadEnvironmentVariables bootstrapper has run. env() here always
+        // returns null regardless of what .env sets (confirmed by
+        // reproduction), so this used to silently fall back to the
+        // hardcoded default forever. The real, env()-aware configuration
+        // now lives in AppServiceProvider::boot(), which runs after the
+        // environment is actually loaded.
         // api/login is deliberately NOT exempt: without CSRF protection here,
         // a cross-site form could force a victim's browser to authenticate
         // as the ATTACKER's account (login CSRF) - the frontend fetches a
