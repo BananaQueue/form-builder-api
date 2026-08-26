@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\FormCodeMatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -33,14 +34,11 @@ class LegacySubmissionController extends Controller
             // to accept only the id, which is a small sequential integer:
             // anyone could walk id=1,2,3... and inject responses into every
             // form in the system, including ones whose link was never
-            // shared. A form's share URL is rebuilt from its CURRENT title,
-            // while forms.form_code is fixed at creation - so if the title
-            // was ever edited, the URL's code only matches the stored
-            // form_code's suffix, not the whole string. Accept either, same
-            // as the read endpoint, so editing a title doesn't break
-            // existing links.
+            // shared. See FormCodeMatcher for why an exact match isn't
+            // required - shared with the read endpoint so both agree on
+            // what a valid code is.
             $formRow = DB::selectOne('SELECT form_code FROM forms WHERE id = ?', [$formId]);
-            if (! $formRow || ! $this->codeMatchesForm($formCode, $formRow->form_code)) {
+            if (! $formRow || ! FormCodeMatcher::matches($formCode, $formRow->form_code)) {
                 return response()->json(['error' => 'Form not found'], 404);
             }
 
@@ -192,28 +190,6 @@ class LegacySubmissionController extends Controller
             $optionsByQuestionId[(int) $row['question_id']][] = $row['option_text'];
         }
         return $optionsByQuestionId;
-    }
-
-    private function codeMatchesForm(string $submittedCode, string $storedFormCode): bool
-    {
-        if ($submittedCode === '') {
-            return false;
-        }
-        if (hash_equals($storedFormCode, $submittedCode)) {
-            return true;
-        }
-        // forms.form_code is "slug-suffix", fixed at creation. The share
-        // URL's slug is rebuilt from the form's CURRENT title every time
-        // it's generated, so if the title was ever edited after creation,
-        // a freshly-built link carries a different slug but the same
-        // suffix. Compare suffixes rather than requiring an exact match, so
-        // editing a title doesn't retroactively break existing links.
-        $submittedParts = explode('-', $submittedCode);
-        $submittedSuffix = end($submittedParts);
-        $storedParts = explode('-', $storedFormCode);
-        $storedSuffix = end($storedParts);
-
-        return $submittedSuffix !== '' && hash_equals($storedSuffix, $submittedSuffix);
     }
 
     private function isRateLimited(string $key): bool

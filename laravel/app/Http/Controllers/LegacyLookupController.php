@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\FormCodeMatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -206,6 +207,7 @@ class LegacyLookupController extends Controller
             }
 
             $form = $this->rowToArray($form);
+            unset($form['form_code']); // internal to matching (see findPublicFormByCode); never part of this public response
             $questions = DB::select('SELECT id, question_text, question_type, description, rating_scale, number_min, number_max, number_step, datetime_type, position, is_required, condition_question_id, condition_type, condition_value FROM questions WHERE form_id = ? AND is_active = 1 ORDER BY position ASC', [$form['id']]);
 
             $form['questions'] = array_map(function (object|array $question): array {
@@ -432,16 +434,30 @@ class LegacyLookupController extends Controller
     }
     private function findPublicFormByCode(string $formCode, string $uniqueCodeCandidate): object|array|null
     {
-        $sql = 'SELECT f.id, f.title, f.description, f.privacy_notice, f.step_mode, f.category_id, c.name as category_name, f.created_at FROM forms f LEFT JOIN categories c ON f.category_id = c.id WHERE f.form_code = ?';
+        $fields = 'f.id, f.form_code, f.title, f.description, f.privacy_notice, f.step_mode, f.category_id, c.name as category_name, f.created_at';
+        $sql = "SELECT {$fields} FROM forms f LEFT JOIN categories c ON f.category_id = c.id WHERE f.form_code = ?";
         $forms = DB::select($sql, [$formCode]);
         if ($forms) {
             return $forms[0];
         }
 
-        if ($uniqueCodeCandidate !== $formCode) {
-            $forms = DB::select($sql, [$uniqueCodeCandidate]);
-            if ($forms) {
-                return $forms[0];
+        // The frontend rebuilds share URLs from a form's CURRENT,
+        // untruncated title every time one is generated, but the stored
+        // form_code's slug is truncated at creation (see
+        // LegacyFormWriteController::generateFormCodeWithSlug) - so a
+        // freshly-built link's slug almost never exactly matches the
+        // stored one, even for the form it was just generated for. RIGHT()/
+        // LENGTH() is an exact trailing-substring comparison, not a LIKE
+        // pattern, so there's no wildcard for attacker input to exploit -
+        // narrows candidates only; FormCodeMatcher (shared with the submit
+        // endpoint) makes the actual match decision below.
+        if ($uniqueCodeCandidate !== '' && $uniqueCodeCandidate !== $formCode) {
+            $suffixSql = "SELECT {$fields} FROM forms f LEFT JOIN categories c ON f.category_id = c.id WHERE RIGHT(f.form_code, LENGTH(?)) = ?";
+            $candidates = DB::select($suffixSql, [$uniqueCodeCandidate, $uniqueCodeCandidate]);
+            foreach ($candidates as $candidate) {
+                if (FormCodeMatcher::matches($formCode, $candidate->form_code)) {
+                    return $candidate;
+                }
             }
         }
 
