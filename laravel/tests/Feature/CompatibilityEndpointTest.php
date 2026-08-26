@@ -23,6 +23,20 @@ class CompatibilityEndpointTest extends TestCase
         $response->assertOk()->assertJson(['logged_in' => false]);
     }
 
+    public function test_unknown_api_path_returns_json_404_not_the_spa_shell(): void
+    {
+        // Regression test: the SPA catch-all route used to match ANY path
+        // without a dot, api/... included, so a mistyped or removed API
+        // route never reached Laravel's router-level 404 at all - it
+        // silently served the React app's index.html with a 200, and
+        // bootstrap/app.php's shouldRenderJsonWhen(api/*) never got a
+        // chance to fire.
+        $response = $this->getJson('/api/this-route-does-not-exist');
+
+        $response->assertStatus(404);
+        $this->assertJson($response->getContent());
+    }
+
     public function test_native_session_route_matches_legacy_authenticated_shape(): void
     {
         $response = $this->withSession([

@@ -150,5 +150,8 @@ Route::middleware('legacy.superadmin')->group(function (): void {
     Route::post('/users/{id}/email', [\App\Http\Controllers\LegacyUserController::class, 'setEmail'])->whereNumber('id');
 });
 
+// Excludes api/... so an unmatched API path 404s through Laravel's normal
+// router (and bootstrap/app.php's shouldRenderJsonWhen renders it as JSON)
+// instead of being swallowed here and served the SPA shell as a false 200.
 Route::get('/{path}', $serveReactApp)
-    ->where('path', '^(?!.*\.).*$');
+    ->where('path', '^(?!api(/|$))(?!.*\.).*$');
