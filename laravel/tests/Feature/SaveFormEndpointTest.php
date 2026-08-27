@@ -26,7 +26,7 @@ class SaveFormEndpointTest extends TestCase
     {
         $token = 'csrf-token';
         DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
-            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE form_code = ?', \Mockery::type('array'))->andReturn([]);
+            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE RIGHT(form_code, LENGTH(?)) = ?', \Mockery::type('array'))->andReturn([]);
             DB::shouldReceive('insert')->once()->with('INSERT INTO forms (title, description, category_id, form_code, created_by, privacy_notice, step_mode) VALUES (?, ?, ?, ?, ?, ?, ?)', \Mockery::on(fn ($values) => $values[0] === 'Safety Check' && $values[2] === 1 && $values[4] === 5))->andReturnTrue();
             $pdo = new class {
                 public int $next = 100;
@@ -67,7 +67,7 @@ class SaveFormEndpointTest extends TestCase
         $capturedFormCode = null;
 
         DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) use (&$capturedFormCode) {
-            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE form_code = ?', \Mockery::type('array'))->andReturn([]);
+            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE RIGHT(form_code, LENGTH(?)) = ?', \Mockery::type('array'))->andReturn([]);
             DB::shouldReceive('insert')->once()->with('INSERT INTO forms (title, description, category_id, form_code, created_by, privacy_notice, step_mode) VALUES (?, ?, ?, ?, ?, ?, ?)', \Mockery::on(function ($values) use (&$capturedFormCode) {
                 $capturedFormCode = $values[3] ?? '';
 
@@ -102,11 +102,60 @@ class SaveFormEndpointTest extends TestCase
         $this->assertLessThanOrEqual(20, strlen($response->json('form_code')));
     }
 
+    public function test_save_form_retries_when_the_generated_codes_suffix_collides(): void
+    {
+        // Regression test: forms.form_code is always stored as "slug-code"
+        // (see generateFormCodeWithSlug), never the bare code alone, so a
+        // naive WHERE form_code = ? collision check against just the random
+        // code could never match an existing row - it always "passed" on
+        // the first try no matter what, even when the code's suffix (the
+        // part FormCodeMatcher actually treats as the unique, unguessable
+        // capability) was already in use by another form. The check has to
+        // compare against that trailing suffix instead, and retry when it
+        // collides.
+        $token = 'csrf-token';
+        $seenCodes = [];
+
+        DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) use (&$seenCodes) {
+            DB::shouldReceive('select')
+                ->twice()
+                ->with('SELECT id FROM forms WHERE RIGHT(form_code, LENGTH(?)) = ?', \Mockery::on(function (array $bindings) use (&$seenCodes): bool {
+                    if (count($bindings) !== 2 || $bindings[0] !== $bindings[1] || strlen($bindings[0]) !== 7) {
+                        return false;
+                    }
+                    $seenCodes[] = $bindings[0];
+
+                    return true;
+                }))
+                ->andReturn([(object) ['id' => 1]], []);
+            DB::shouldReceive('insert')->once()->with('INSERT INTO forms (title, description, category_id, form_code, created_by, privacy_notice, step_mode) VALUES (?, ?, ?, ?, ?, ?, ?)', \Mockery::type('array'))->andReturnTrue();
+            $pdo = new class {
+                public function lastInsertId(): string { return '400'; }
+            };
+            DB::shouldReceive('getPdo')->once()->andReturn($pdo);
+
+            return $callback();
+        });
+        $audit = \Mockery::mock();
+        DB::shouldReceive('table')->once()->with('audit_logs')->andReturn($audit);
+        $audit->shouldReceive('insert')->once()->with(\Mockery::type('array'))->andReturnTrue();
+
+        $response = $this->withSession(['_token' => $token, 'logged_in' => true, 'user_id' => 5, 'username' => 'admin', 'role' => 'super_admin'])
+            ->withHeader('X-CSRF-TOKEN', $token)
+            ->postJson('/api/forms', [
+                'title' => 'Retry Check',
+                'questions' => [],
+            ]);
+
+        $response->assertOk()->assertJson(['success' => true, 'form_id' => '400']);
+        $this->assertCount(2, $seenCodes, 'a colliding suffix should force a second, freshly-generated candidate to be checked');
+    }
+
     public function test_native_create_form_route_matches_legacy_success_shape(): void
     {
         $token = 'csrf-token';
         DB::shouldReceive('transaction')->once()->andReturnUsing(function ($callback) {
-            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE form_code = ?', \Mockery::type('array'))->andReturn([]);
+            DB::shouldReceive('select')->once()->with('SELECT id FROM forms WHERE RIGHT(form_code, LENGTH(?)) = ?', \Mockery::type('array'))->andReturn([]);
             DB::shouldReceive('insert')->once()->with('INSERT INTO forms (title, description, category_id, form_code, created_by, privacy_notice, step_mode) VALUES (?, ?, ?, ?, ?, ?, ?)', \Mockery::on(fn ($values) => $values[0] === 'Native Route Form'))->andReturnTrue();
             $pdo = new class {
                 public function lastInsertId(): string { return '300'; }

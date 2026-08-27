@@ -247,7 +247,17 @@ class LegacyFormWriteController extends Controller
         for ($attempt = 0; $attempt < 10; $attempt++) {
             $code = '';
             for ($i = 0; $i < $length; $i++) $code .= $characters[random_int(0, strlen($characters) - 1)];
-            if (! DB::select('SELECT id FROM forms WHERE form_code = ?', [$code])) return $code;
+            // forms.form_code is always stored as "slug-code" (see
+            // generateFormCodeWithSlug), never the bare code alone, so a
+            // WHERE form_code = ? check against $code by itself can never
+            // match an existing row - it always "passes" on the first try
+            // regardless of whether this suffix is already taken. The
+            // suffix is what FormCodeMatcher actually treats as the unique,
+            // unguessable part, so that's what has to be checked here.
+            // RIGHT()/LENGTH() is an exact trailing-substring comparison,
+            // not a LIKE pattern, so a code containing '%' or '_' can't turn
+            // this into a wildcard match.
+            if (! DB::select('SELECT id FROM forms WHERE RIGHT(form_code, LENGTH(?)) = ?', [$code, $code])) return $code;
         }
         return $this->generateUniqueFormCode($length + 2);
     }
