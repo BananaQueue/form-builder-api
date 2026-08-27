@@ -28,6 +28,12 @@ class LegacySubmissionController extends Controller
         }
 
         try {
+            // Counted before the code is even checked - otherwise a wrong
+            // guess never increments the counter and isRateLimited() never
+            // trips, leaving an attacker free to brute-force the share code
+            // (or walk ids) at unlimited speed as long as every guess fails.
+            $this->recordRateLimitAttempt($rateLimitKey);
+
             // The share code, not the numeric id, is the actual capability
             // that makes a form "public" - reading a form already requires
             // it (LegacyLookupController::publicFormByCode). Submitting used
@@ -42,7 +48,6 @@ class LegacySubmissionController extends Controller
                 return response()->json(['error' => 'Form not found'], 404);
             }
 
-            $this->recordRateLimitAttempt($rateLimitKey);
             $questions = DB::select('SELECT id, question_text, question_type, number_min, number_max, is_required, condition_question_id, condition_type, condition_value FROM questions WHERE form_id = ? AND is_active = 1 ORDER BY position ASC', [$formId]);
 
             $questionsById = [];

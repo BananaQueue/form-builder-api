@@ -45,6 +45,37 @@ class SubmitResponseEndpointTest extends TestCase
         $response->assertStatus(404)->assertJson(['error' => 'Form not found']);
     }
 
+    public function test_submit_response_rate_limits_repeated_wrong_code_guesses(): void
+    {
+        // Regression test: recordRateLimitAttempt() used to run only after a
+        // code match succeeded, so a wrong guess never counted against the
+        // limit and isRateLimited() could never trip - an attacker could
+        // brute-force the share code (or walk ids) at unlimited speed as
+        // long as every guess kept failing. Every attempt must count,
+        // matched or not.
+        DB::shouldReceive('selectOne')
+            ->times(20)
+            ->with('SELECT form_code FROM forms WHERE id = ?', [10])
+            ->andReturn((object) ['form_code' => 'daily-inspection-abc1234']);
+
+        for ($i = 0; $i < 20; $i++) {
+            $response = $this->postJson('/api/public/forms/10/responses', [
+                'form_code' => 'totally-guessed-wrong-'.$i,
+                'answers' => [],
+            ]);
+            $response->assertStatus(404)->assertJson(['error' => 'Form not found']);
+        }
+
+        // The 21st attempt is blocked before the form is even looked up -
+        // the mock's ->times(20) above would fail the test if it were called
+        // again here.
+        $response = $this->postJson('/api/public/forms/10/responses', [
+            'form_code' => 'totally-guessed-wrong-20',
+            'answers' => [],
+        ]);
+        $response->assertStatus(429)->assertJson(['error' => 'Too many submissions. Please try again later.']);
+    }
+
     public function test_submit_response_accepts_a_code_whose_slug_is_stale_but_suffix_matches(): void
     {
         // A form's share URL is rebuilt from its CURRENT title every time,
