@@ -155,9 +155,30 @@ Info "Copying application into $relLaravel"
 # robocopy's /XD and /XF are the real thing. Default retry behavior
 # (1,000,000 retries, 30s apart) is meant for interactive use - /R and /W
 # keep an unattended run from hanging on a locked file.
-robocopy $laravelSrc $relLaravel /E /XD vendor node_modules .git /XF .env .env.testing /R:2 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
+$storageSrc        = Join-Path $laravelSrc 'storage'
+$bootstrapCacheSrc = Join-Path $laravelSrc 'bootstrap\cache'
+robocopy $laravelSrc $relLaravel /E /XD vendor node_modules .git "$storageSrc" "$bootstrapCacheSrc" /XF .env .env.testing /R:2 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { Die "Copying application into $relLaravel failed (robocopy exit code $LASTEXITCODE)." }
 Ok "Application copied"
+
+# storage/ and bootstrap/cache/ are excluded above, not just filtered: this
+# checkout's copies hold whatever THIS machine happened to generate locally -
+# dev/test session files, file-cache entries (SESSION_DRIVER and CACHE_STORE
+# are both 'file' in production), compiled views, and - since route:cache is
+# deliberately never run below, because routes/web.php's React catch-all is a
+# closure Laravel can't serialize - possibly a stale cached routes file from
+# any local `artisan route:cache` this checkout ever ran, which Laravel would
+# silently use over the real routes/web.php. Every release instead gets a
+# fresh, empty skeleton; config:cache/view:cache further below repopulate the
+# two caches this script does intend to ship.
+foreach ($dir in @(
+        'storage\app\public', 'storage\app\private',
+        'storage\framework\cache\data', 'storage\framework\sessions',
+        'storage\framework\testing', 'storage\framework\views',
+        'storage\logs', 'bootstrap\cache')) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $relLaravel $dir) | Out-Null
+}
+Ok "Fresh storage/ and bootstrap/cache/ skeleton created (no dev-machine leftovers)"
 
 Info "Installing PHP dependencies (production only)..."
 Push-Location $relLaravel
@@ -201,6 +222,7 @@ if ($envText -match '(?m)^APP_KEY=\s*$') {
     Info "No APP_KEY yet - generating one (without it, every request 500s)"
     Push-Location $relLaravel
     & $php artisan key:generate --force | Out-Null
+    if ($LASTEXITCODE -ne 0) { Pop-Location; Die "artisan key:generate failed. Without an APP_KEY the app 500s on every request - nothing was activated." }
     Pop-Location
     Copy-Item (Join-Path $relLaravel '.env') $sharedEnv -Force   # persist it
     Ok "APP_KEY generated and saved to shared .env"
@@ -299,7 +321,9 @@ Ok "Migrations applied (tracked in the migrations table)"
 
 Push-Location $relLaravel
 & $php artisan config:cache | Out-Null
+if ($LASTEXITCODE -ne 0) { Pop-Location; Die "artisan config:cache failed." }
 & $php artisan view:cache   | Out-Null
+if ($LASTEXITCODE -ne 0) { Pop-Location; Die "artisan view:cache failed." }
 # NOTE: `route:cache` is deliberately NOT run. routes/web.php uses a closure
 # for the React catch-all, and Laravel cannot serialize closure routes.
 Pop-Location
