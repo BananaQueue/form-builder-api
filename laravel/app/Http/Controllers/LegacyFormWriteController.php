@@ -16,6 +16,10 @@ class LegacyFormWriteController extends Controller
             return response()->json(['error' => 'Invalid data provided'], 400);
         }
 
+        if ($error = $this->checkboxOptionCommaError($data['questions'])) {
+            return response()->json(['error' => $error], 400);
+        }
+
         try {
             $formCode = null;
             $formId = DB::transaction(function () use ($data, $request, &$formCode): string {
@@ -67,6 +71,10 @@ class LegacyFormWriteController extends Controller
         $data = $request->json()->all();
         if (! is_array($data) || ! isset($data['form_id'], $data['title'], $data['questions'])) {
             return response()->json(['error' => 'Invalid data provided'], 400);
+        }
+
+        if ($error = $this->checkboxOptionCommaError($data['questions'])) {
+            return response()->json(['error' => $error], 400);
         }
 
         $formId = (int) $data['form_id'];
@@ -216,6 +224,32 @@ class LegacyFormWriteController extends Controller
             return response()->json(['error' => 'Failed to delete form'], 500);
         }
     }
+    /**
+     * Checkbox answers are stored comma-joined (LegacySubmissionController), so an
+     * option whose own text has a comma would later be read back as two options.
+     * Returns the error to show the form's author, or null when every option is fine.
+     */
+    private function checkboxOptionCommaError(mixed $questions): ?string
+    {
+        if (! is_array($questions)) {
+            return null;
+        }
+
+        foreach ($questions as $question) {
+            if (! is_array($question) || ($question['question_type'] ?? ($question['type'] ?? null)) !== 'checkbox') {
+                continue;
+            }
+
+            foreach (is_array($question['options'] ?? null) ? $question['options'] : [] as $option) {
+                if (str_contains((string) $option, ',')) {
+                    return 'Checkbox options cannot contain commas: "'.$option.'". Use another word or symbol, e.g. "Water and air" or "Water / air".';
+                }
+            }
+        }
+
+        return null;
+    }
+
     private function generateFormCodeWithSlug(string $title, int $codeLength = 7): string
     {
         $uniqueCode = $this->generateUniqueFormCode($codeLength);
